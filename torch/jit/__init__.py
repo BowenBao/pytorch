@@ -202,6 +202,7 @@ def get_trace_graph(f, args=(), kwargs=None, _force_outplace=False):
 
 def _unique_state_dict(module, keep_vars=False):
     state_dict = module.state_dict(keep_vars=keep_vars)
+    print('state:', state_dict.keys())
     filtered_dict = type(state_dict)()
     seen_ids = set()
     for k, v in state_dict.items():
@@ -209,6 +210,7 @@ def _unique_state_dict(module, keep_vars=False):
             continue
         seen_ids.add(id(v))
         filtered_dict[k] = v
+    print('filtered:', filtered_dict.keys())
     return filtered_dict
 
 

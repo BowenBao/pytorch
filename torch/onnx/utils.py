@@ -195,7 +195,7 @@ def _trace_and_get_graph_from_model(model, args, training):
     # training mode was.)
     with set_training(model, training):
         trace, torch_out = torch.jit.get_trace_graph(model, args, _force_outplace=True)
-
+    print(trace)
     if orig_state_dict_keys != _unique_state_dict(model).keys():
         raise RuntimeError("state_dict changed after running the tracer; "
                            "something weird is happening in your model!")
@@ -227,7 +227,8 @@ def _model_to_graph(model, args, f, verbose=False, training=False,
             raise RuntimeError('\'forward\' method must be a script method')
     else:
         graph, torch_out = _trace_and_get_graph_from_model(model, args, training)
-        params = list(_unique_state_dict(model).values())
+        params = list(_unique_state_dict(model, True).values())
+        # params = list(_unique_state_dict(model).values())
 
     graph = _optimize_graph(graph, operator_export_type)
 
@@ -289,6 +290,9 @@ def _export(model, args, f, export_params=True, verbose=False, training=False,
     from torch.onnx.symbolic import _onnx_opset_version
     defer_weight_export = export_type is not ExportTypes.PROTOBUF_FILE
     if export_params:
+        print('params')
+        [print(param.shape) for param in params]
+        print('param count', len(params))
         proto, export_map = graph._export_onnx(params, _onnx_opset_version, defer_weight_export, operator_export_type)
     else:
         proto, export_map = graph._export_onnx([], _onnx_opset_version, False, operator_export_type)

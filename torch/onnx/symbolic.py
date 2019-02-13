@@ -376,8 +376,15 @@ def cumsum(g, input, dim):
 
 
 def t(g, self):
-    return g.op("Transpose", self, perm_i=(1, 0))
-
+    dataType = self.type().scalarType()
+    if dataType != 'Float':
+        tensor = g.op("Cast", self, to_i=cast_pytorch_to_onnx['Float'])
+    else:
+        tensor = self
+    tensor = g.op("Transpose", tensor, perm_i=(1, 0))
+    if dataType != 'Float':
+        tensor = g.op("Cast", tensor, to_i=cast_pytorch_to_onnx[dataType])
+    return tensor
 
 def expand(g, self, size, implicit):
     size = _maybe_get_const(size, 'is')
@@ -427,6 +434,9 @@ def transpose(g, self, dim0, dim1):
     # NB: Transpose in ONNX is actually a Permute
     axes = list(range(self.type().dim()))
     axes[dim0], axes[dim1] = axes[dim1], axes[dim0]
+
+    print(self.type().scalarType())
+
     return g.op("Transpose", self, perm_i=axes)
 
 
@@ -434,6 +444,7 @@ def transpose(g, self, dim0, dim1):
 def permute(g, self, dims):
     if dims == list(range(0, len(dims))):
         return self
+    print(self.type().scalarType())
     return g.op("Transpose", self, perm_i=dims)
 
 
@@ -1515,3 +1526,7 @@ def flatten(g, input, start_dim, end_dim):
     shape = g.op("Constant", value_t=torch.LongTensor(output_dims))
     p = _reshape_from_tensor(g, input, shape)
     return p
+
+@parse_args('v')
+def nonzero(g, input):
+    return g.op('NonZero', input)
