@@ -26,7 +26,9 @@ Value* insertConstant(
     if (!ref.is_variable()) {
       ref = autograd::make_variable(ref, /*requires_grad=*/false);
     } else {
-      AT_ASSERT(!ref.requires_grad());
+      ref.set_requires_grad(false);
+      AT_WARN("Constant created with requires_grad = true.");
+      //AT_ASSERT(!ref.requires_grad());
     }
     n->output()->inferTypeFrom(
         ref); // note: before t_ because of std::move(ref)

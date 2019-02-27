@@ -115,6 +115,9 @@ def _unpack_list(list_value):
 def parse_args(*arg_descriptors):
     def decorator(fn):
         def wrapper(g, *args):
+            if len(arg_descriptors) != len(args):
+                import pdb
+                pdb.set_trace()
             assert len(arg_descriptors) == len(args)
             args = [_parse_arg(arg, arg_desc) for arg, arg_desc in zip(args, arg_descriptors)]
             return fn(g, *args)
@@ -1234,7 +1237,13 @@ def full_like(g, input, fill_value, dtype, layout, device):
 @parse_args('v', 'v', 'v', 'v', 'i')
 def slice(g, self, dim, start, end, step):
     if step != 1:
-        _unimplemented("slice", "step!=1 is currently not supported")
+        #_unimplemented("slice", "step!=1 is currently not supported")
+        start_unsqueezed = g.op("Unsqueeze", start, axes_i=[0])
+        end_unsqueezed = g.op("Unsqueeze", end, axes_i=[0])
+        dim_unsqueezed = g.op("Unsqueeze", dim, axes_i=[0])
+        step_constant = g.op("Constant", value_t=torch.LongTensor(step))
+        step_unsqueezed = g.op("Unsqueeze", step_constant, axes_i=[0])
+        return g.op('aten::slice', self, start_unsqueezed, end_unsqueezed, dim_unsqueezed, step_unsqueezed)
     if start.node().kind() != 'onnx::Constant' or \
             end.node().kind() != 'onnx::Constant' or dim.node().kind() != 'onnx::Constant':
         start_unsqueezed = g.op("Unsqueeze", start, axes_i=[0])
@@ -1585,3 +1594,22 @@ def flatten(g, input, start_dim, end_dim):
 @parse_args('v')
 def nonzero(g, input):
     return g.op('NonZero', input)
+
+
+# phony placeholders for unsupported ops
+@parse_args('v', 'v')
+def index(g, self, input):
+    return g.op('aten::index', self, input)
+
+@parse_args('v', 'i')
+def unbind(g, input, dim):
+    return g.op('aten::unbind', input, dim_i=dim)
+
+@parse_args('v', 'v')
+def __and_(g, self, other):
+    return g.op('And', self, other)
+
+# This should go in prim, not aten op.
+@parse_args('v')
+def prim_shape(g, self):
+    return g.op('Shape', self)
