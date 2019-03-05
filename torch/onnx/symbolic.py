@@ -73,6 +73,7 @@ def _parse_arg(value, desc):
     if desc == 'v' or not _is_value(value):
         return value
     if value.node().kind() != 'onnx::Constant':
+        print(value.node().kind())
         raise RuntimeError("ONNX symbolic expected a constant value in the trace")
     tval = value.node()['value']
     if desc == 'i':
@@ -115,9 +116,13 @@ def _unpack_list(list_value):
 def parse_args(*arg_descriptors):
     def decorator(fn):
         def wrapper(g, *args):
+            print(fn.__name__)
             if len(arg_descriptors) != len(args):
-                import pdb
-                pdb.set_trace()
+                print(g)
+                print(fn.__name__)
+                print(args)
+                # import pdb
+                # pdb.set_trace()
             assert len(arg_descriptors) == len(args)
             args = [_parse_arg(arg, arg_desc) for arg, arg_desc in zip(args, arg_descriptors)]
             return fn(g, *args)
@@ -516,6 +521,20 @@ def split_with_sizes(g, self, split_sizes, dim):
 
 @parse_args('v', 'i', 'v')
 def select(g, self, dim, index):
+    # TODO: special case handling
+    # if index is None:
+    #     print(g)
+    #     print(self)
+    #     print(dim)
+    #     print(index)
+    #     index = _parse_arg(dim, 'v')
+    #     dim = 0
+    #     print('index is None, the special case where dim is actually index.')
+    #     print(index)
+    # else:
+    #     dim = _parse_arg(dim, 'i')
+    #     index = _parse_arg(index, 'v')
+    #     print('proceed as normal')
     if dim > 1:
         # TODO: this is a temporary hack because of the implementation details
         # of Gather in caffe2. We need to change this as soon as possible.
@@ -757,12 +776,26 @@ replication_pad2d = replication_pad
 replication_pad3d = replication_pad
 
 
-@parse_args('v', 'is')
+# @parse_args('v', 'is')
 def upsample_nearest2d(g, input, output_size):
-    height_scale = float(output_size[-2]) / input.type().sizes()[-2]
-    width_scale = float(output_size[-1]) / input.type().sizes()[-1]
-    scales = g.op("Constant", value_t=torch.tensor([1., 1., height_scale,
-                                                    width_scale]))
+    output_size = _maybe_get_const(output_size, 'is')
+
+    if _is_value(output_size):
+        # output_size.node().kind() == "prim::ListConstruct"
+        print('unpack list')
+        # output_size = _unpack_list(output_size)
+
+        print(output_size)
+
+        div_lhs = g.op('Cast', output_size, to_i=cast_pytorch_to_onnx['Float'])
+        div_rhs = g.op('Cast', g.op('Slice', g.op('Shape', input), starts_i=[2], ends_i=[4]), to_i=cast_pytorch_to_onnx['Float'])
+
+        scales = g.op('Unsqueeze', g.op('Div', div_lhs, div_rhs), axes_i=[0, 1])
+    else:
+        height_scale = float(output_size[-2]) / input.type().sizes()[-2]
+        width_scale = float(output_size[-1]) / input.type().sizes()[-1]
+        scales = g.op("Constant", value_t=torch.tensor([1., 1., height_scale,
+                                                        width_scale]))
 
     return g.op("Upsample", input, scales,
                 mode_s="nearest")
@@ -1243,7 +1276,7 @@ def slice(g, self, dim, start, end, step):
         dim_unsqueezed = g.op("Unsqueeze", dim, axes_i=[0])
         step_constant = g.op("Constant", value_t=torch.LongTensor(step))
         step_unsqueezed = g.op("Unsqueeze", step_constant, axes_i=[0])
-        return g.op('aten::slice', self, start_unsqueezed, end_unsqueezed, dim_unsqueezed, step_unsqueezed)
+        return g.op('SliceVer10', self, start_unsqueezed, end_unsqueezed, dim_unsqueezed, step_unsqueezed)  
     if start.node().kind() != 'onnx::Constant' or \
             end.node().kind() != 'onnx::Constant' or dim.node().kind() != 'onnx::Constant':
         start_unsqueezed = g.op("Unsqueeze", start, axes_i=[0])
@@ -1271,14 +1304,18 @@ def unsqueeze(g, self, dim):
     return g.op("Unsqueeze", self, axes_i=[dim])
 
 
-@parse_args('v', 'i', 'i', 'i', 'i')
+@parse_args('v', 'v', 'i', 'i', 'i')
 def topk(g, self, k, dim, largest, sorted, out=None):
     if out is not None:
         _unimplemented("TopK", "Out parameter is not supported for topk")
     if not largest:
         _unimplemented("TopK", "Ascending TopK is not supported")
 
-    return g.op("TopK", self, k_i=k, axis_i=dim, outputs=2)
+    k = _maybe_get_const(k, 'i')
+    if not _is_value(k):
+        return g.op("TopK", self, k_i=k, axis_i=dim, outputs=2)
+    else:
+        return g.op("TopK", self, k, axis_i=dim, outputs=2)
 
 
 def to(g, self, *args):
@@ -1599,17 +1636,39 @@ def nonzero(g, input):
 # phony placeholders for unsupported ops
 @parse_args('v', 'v')
 def index(g, self, input):
-    return g.op('aten::index', self, input)
+    print('phony index used')
+    return g.op('phony_index', self, input)
 
-@parse_args('v', 'i')
-def unbind(g, input, dim):
-    return g.op('aten::unbind', input, dim_i=dim)
+# worked around using split
+# @parse_args('v', 'i')
+# def unbind(g, input, dim):
+#     print('phony unbind used')
+#     return g.op('unbind', input, dim_i=dim)
 
 @parse_args('v', 'v')
 def __and_(g, self, other):
+    print('phony __and_ used')
     return g.op('And', self, other)
 
-# This should go in prim, not aten op.
 @parse_args('v')
 def prim_shape(g, self):
+    print('phony prim_shape used')
     return g.op('Shape', self)
+
+# aten::log2, aten::floor, roi_ops::roi_align_forward
+
+@parse_args('v')
+def log2(g, self):
+    print('phony log2 used')
+    _ln2 = 0.693147180559945309
+    return g.op('Div', log(g, self), g.op('Constant', value_t=torch.Tensor([_ln2])))
+
+@parse_args('v')
+def floor(g, self):
+    print('phony floor used')
+    return g.op('Floor', self)
+
+@parse_args('v', 'v', 'v')
+def masked_scatter(g, self, mask, source):
+    print('phony masked scatter used')
+    return g.op('MaskedScatter', self, mask, source)

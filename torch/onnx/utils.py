@@ -203,7 +203,7 @@ def _trace_and_get_graph_from_model(model, args, training):
     if orig_state_dict_keys != _unique_state_dict(model).keys():
         raise RuntimeError("state_dict changed after running the tracer; "
                            "something weird is happening in your model!")
-
+    print(trace)
     return trace.graph(), torch_out
 
 
@@ -519,6 +519,10 @@ def _run_symbolic_function(g, n, inputs, env, operator_export_type=OperatorExpor
                                   .format(op_name, op_name))
                     return None
                 fn = getattr(torch.onnx.symbolic, op_name)
+                # print('op_name', op_name)
+                # if op_name == 'topK' or op_name == 'Topk' or op_name == 'TopK' or op_name == 'topk':
+                #    print('inputs', inputs)
+                #    print('attrs', attrs)
                 return fn(g, *inputs, **attrs)
 
         elif ns == "prim":
