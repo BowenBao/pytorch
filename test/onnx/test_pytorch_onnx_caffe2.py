@@ -1060,6 +1060,24 @@ class TestCaffe2Backend(unittest.TestCase):
         x = torch.randn(2, 3, requires_grad=True)
         self.run_model_test(ReshapeAsModel(), train=False, input=x, batch_size=BATCH_SIZE)
 
+    def test_and(self):
+        class AndModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x & y
+
+        x = torch.randint(0, 1, (3, 5)).to(dtype=torch.bool)
+        y = torch.randint(0, 1, (3, 5)).to(dtype=torch.bool)
+        self.run_model_test(AndModel(), train=False, input=(x, y), batch_size=BATCH_SIZE)
+
+    def test_or(self):
+        class OrModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x | y
+
+        x = torch.randint(0, 1, (3, 5)).to(dtype=torch.bool)
+        y = torch.randint(0, 1, (3, 5)).to(dtype=torch.bool)
+        self.run_model_test(OrModel(), train=False, input=(x, y), batch_size=BATCH_SIZE)
+
 # a bit of metaprogramming to set up all the rnn tests
 
 

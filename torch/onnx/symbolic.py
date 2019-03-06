@@ -116,7 +116,10 @@ def _unpack_list(list_value):
 def parse_args(*arg_descriptors):
     def decorator(fn):
         def wrapper(g, *args):
-            print(fn.__name__)
+            if hasattr(fn, '__name__'):
+                print(fn.__name__)
+            else:
+                print('no name')
             if len(arg_descriptors) != len(args):
                 print(g)
                 print(fn.__name__)
@@ -870,6 +873,23 @@ def le(g, input, other):
     return gt_impl(g, input, _if_scalar_type_as(g, other, input))
 
 
+def wrap_logical_op_with_cast_to_and_from_bool(func):
+    def wrap_with_cast(g, input, other):
+        out = func(g, _cast_Bool(g, input, False), _cast_Bool(g, other, False))
+        return g.op("Cast", out, to_i=cast_pytorch_to_onnx[input.type().scalarType()])
+    return wrap_with_cast
+
+
+@wrap_logical_op_with_cast_to_and_from_bool
+def __and_(g, input, other):
+    return g.op('And', input, other)
+
+
+@wrap_logical_op_with_cast_to_and_from_bool
+def __or_(g, input, other):
+    return g.op('Or', input, other)
+
+
 def where(g, condition, self, other):
     return g.op("ATen", condition, self, other, operator_s="where")
 
@@ -1172,6 +1192,7 @@ cast_pytorch_to_onnx = {
     'Int': torch.onnx.TensorProtoDataType.INT32,
     'Long': torch.onnx.TensorProtoDataType.INT64,
     'Short': torch.onnx.TensorProtoDataType.INT16,
+    'Bool': torch.onnx.TensorProtoDataType.BOOL,
 }
 
 scalar_name_to_pytorch = {
@@ -1633,7 +1654,6 @@ def flatten(g, input, start_dim, end_dim):
 def nonzero(g, input):
     return g.op('NonZero', input)
 
-
 # phony placeholders for unsupported ops
 @parse_args('v', 'v')
 def index(g, self, input):
@@ -1646,10 +1666,10 @@ def index(g, self, input):
 #     print('phony unbind used')
 #     return g.op('unbind', input, dim_i=dim)
 
-@parse_args('v', 'v')
-def __and_(g, self, other):
-    print('phony __and_ used')
-    return g.op('And', self, other)
+# @parse_args('v', 'v')
+# def __and_(g, self, other):
+#     print('phony __and_ used')
+#     return g.op('And', self, other)
 
 @parse_args('v')
 def prim_shape(g, self):
