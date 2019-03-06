@@ -260,6 +260,7 @@ class TestOperators(TestCase):
         x = torch.randn(20, 16, 50)
         self.assertONNX(nn.MaxPool1d(3, stride=2), x)
 
+    @unittest.skip("Waiting for https://github.com/onnx/onnx/pull/1836")
     def test_maxpool_indices(self):
         x = torch.randn(20, 16, 50)
         self.assertONNX(nn.MaxPool1d(3, stride=2, return_indices=True), x)
@@ -406,6 +407,7 @@ class TestOperators(TestCase):
         x = torch.rand(3, 4, requires_grad=True)
         self.assertONNX(lambda x: x.acos(), x)
 
+    @unittest.skip("Waiting for https://github.com/onnx/onnx/pull/1836")
     def test_slice(self):
         x = torch.rand(3, 4, requires_grad=True)
         self.assertONNX(lambda x: x[:, 1:2], x)
