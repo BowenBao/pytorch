@@ -1239,7 +1239,7 @@ def zeros_like(g, input, dtype, layout, device):
 @parse_args('v', 'i', 'v', 'v')
 def ones(g, sizes, dtype, layout, device):
     return g.op("ConstantOfShape", sizes,
-                value_t=torch.tensor(1, dtype=scalar_type_to_pytorch_type[dtype]))
+                value_t=torch.tensor([1], dtype=scalar_type_to_pytorch_type[dtype]))
 
 
 @parse_args('v', 'i', 'v', 'v')
@@ -1271,12 +1271,13 @@ def full_like(g, input, fill_value, dtype, layout, device):
 def slice(g, self, dim, start, end, step):
     if step != 1:
         #_unimplemented("slice", "step!=1 is currently not supported")
+        print('slice workaround used')
         start_unsqueezed = g.op("Unsqueeze", start, axes_i=[0])
         end_unsqueezed = g.op("Unsqueeze", end, axes_i=[0])
         dim_unsqueezed = g.op("Unsqueeze", dim, axes_i=[0])
         step_constant = g.op("Constant", value_t=torch.LongTensor(step))
         step_unsqueezed = g.op("Unsqueeze", step_constant, axes_i=[0])
-        return g.op('SliceVer10', self, start_unsqueezed, end_unsqueezed, dim_unsqueezed, step_unsqueezed)  
+        return g.op('SliceVer10', self, start_unsqueezed, end_unsqueezed, dim_unsqueezed, step_unsqueezed)
     if start.node().kind() != 'onnx::Constant' or \
             end.node().kind() != 'onnx::Constant' or dim.node().kind() != 'onnx::Constant':
         start_unsqueezed = g.op("Unsqueeze", start, axes_i=[0])
@@ -1668,7 +1669,7 @@ def floor(g, self):
     print('phony floor used')
     return g.op('Floor', self)
 
-@parse_args('v', 'v', 'v')
-def masked_scatter(g, self, mask, source):
-    print('phony masked scatter used')
-    return g.op('MaskedScatter', self, mask, source)
+@parse_args('v', 'i', 'v', 'v')
+def scatter(g, self, dim, index, source):
+    print('scatter used')
+    return g.op('Scatter', self, index, source, axis_i=dim)
