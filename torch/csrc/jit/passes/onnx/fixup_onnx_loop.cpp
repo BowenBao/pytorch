@@ -8,7 +8,8 @@ void FixupONNXLoops(Block* block) {
     if (node->kind() == ::c10::onnx::Loop) {
       AT_ASSERT(node->blocks().size() == 1);
       auto* sub_block = node->blocks()[0];
-      sub_block->insertInput(1, "cond");
+      Value* v = sub_block->insertInput(1, "cond");
+      v->setType(CompleteTensorType::fromNumberType(IntType::get()));
     }
     for (Block* block : node->blocks()) {
       FixupONNXLoops(block);

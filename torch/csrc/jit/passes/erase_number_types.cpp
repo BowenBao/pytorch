@@ -10,6 +10,7 @@ static void EraseNumberTypesOnBlock(Block* block) {
     for (auto inp : it->inputs()) {
       if (inp->type()->isSubtypeOf(NumberType::get())) {
         inp->setType(TensorType::get());
+        // inp->setType(CompleteTensorType::fromNumberType(inp->type()));
       }
     }
     for (auto sub : it->blocks()) {

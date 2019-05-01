@@ -1290,10 +1290,10 @@ scalar_type_to_onnx = [
 ]
 
 
-@parse_args('v', 'i', 'v', 'v', 'b')
+@parse_args('v', 'i', 'v', 'v', 'v')
 def zeros(g, sizes, dtype, layout, device, pin_memory=False):
-    if pin_memory:
-        raise RuntimeError("onnx pin_memory support is not implemented")
+    # if pin_memory:
+    #     raise RuntimeError("onnx pin_memory support is not implemented")
     # NOTE: no way to set device and layout in ONNX, so we ignore it
     return g.op("ConstantOfShape", sizes,
                 value_t=torch.tensor([0], dtype=scalar_type_to_pytorch_type[dtype]))
@@ -1308,7 +1308,7 @@ def zeros_like(g, input, dtype, layout, device, pin_memory=False):
                 value_t=torch.tensor([0], dtype=scalar_type_to_pytorch_type[dtype]))
 
 
-@parse_args('v', 'i', 'v', 'v', 'b')
+@parse_args('v', 'i', 'v', 'v', 'v')
 def ones(g, sizes, dtype, layout, device, pin_memory=False):
     if pin_memory:
         raise RuntimeError("onnx pin_memory support is not implemented")
