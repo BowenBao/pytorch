@@ -77,6 +77,8 @@ def skipIfEmbed(func):
 def do_export(model, inputs, *args, **kwargs):
     f = io.BytesIO()
     out = torch.onnx._export(model, inputs, f, *args, **kwargs)
+    if isinstance(model, torch.jit.ScriptModule):
+        out = model(*inputs)
     return f.getvalue(), out
 
 
@@ -1650,6 +1652,44 @@ class TestCaffe2Backend(unittest.TestCase):
             def forward(self, input):
                 return view_by_prim_shape(input)
         self.run_model_test(PrimShapeModel(), train=False, input=x, batch_size=BATCH_SIZE)
+
+    def test_while(self):
+        class WhileModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x):
+                a = 0
+                while a < 4:
+                    a += 1
+                return x + a
+
+        model = WhileModel()
+        inputs = torch.zeros(1, 2, 3, dtype=torch.long)
+        outputs = model(inputs)
+        self.run_model_test(model, train=False, input=(inputs,), batch_size=BATCH_SIZE,
+                            example_outputs=(outputs,))
+
+    def test_loop(self):
+        class LoopModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x):
+                for i in range(5):
+                    x = x + i
+                return x
+
+        model = LoopModel()
+        inputs = torch.zeros(1, 2, 3, dtype=torch.long)
+        outputs = model(inputs)
+        self.run_model_test(model, train=False, input=(inputs,), batch_size=BATCH_SIZE,
+                            example_outputs=(outputs,))
+
+    def test_select(self):
+        class SelectModel(torch.nn.Module):
+            def forward(self, x):
+                return torch.select(x, 0, 1)
+
+        model = SelectModel()
+        inputs = torch.randn(3, 2, 1)
+        self.run_model_test(model, train=False, input=(inputs, ), batch_size=BATCH_SIZE)
 
 # a bit of metaprogramming to set up all the rnn tests
 
