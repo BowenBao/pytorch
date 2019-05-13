@@ -21,16 +21,18 @@ static void EraseNumberTypesOnBlock(Block* block) {
         // ONNX does not support non-tensor constants
         if (it->output()->type()->isSubtypeOf(NumberType::get()) ||
             it->output()->type()->isSubtypeOf(BoolType::get())) {
-          at::Scalar s;
+          at::Tensor t;
           if (it->output()->type()->isSubtypeOf(BoolType::get())) {
-            s = static_cast<int64_t>(*constant_as<bool>(it->output()));
+            auto b = *constant_as<bool>(it->output());
+            t = at::bool_to_tensor(b);
           } else {
-            s = *constant_as<at::Scalar>(it->output());
+            auto s = *constant_as<at::Scalar>(it->output());
+            t = at::scalar_to_tensor(s);
           }
 
           WithInsertPoint guard(*it);
           Value* r = block->owningGraph()->insertConstant(
-              scalar_to_tensor(s), nullptr, c10::nullopt, it->scope());
+              t, nullptr, c10::nullopt, it->scope());
           it->output()->replaceAllUsesWith(r);
         }
       } break;
@@ -44,10 +46,9 @@ static void EraseNumberTypesOnBlock(Block* block) {
       } break;
       default: {
         for (auto o : it->outputs()) {
-          if (o->type()->isSubtypeOf(NumberType::get())) {
+          if (o->type()->isSubtypeOf(NumberType::get()) ||
+              o->type()->isSubtypeOf(BoolType::get())) {
             o->setType(CompleteTensorType::fromNumberType(o->type()));
-          } else if (o->type()->isSubtypeOf(BoolType::get())) {
-            o->setType(CompleteTensorType::fromBoolType());
           }
         }
       } break;

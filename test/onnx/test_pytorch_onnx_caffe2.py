@@ -1598,6 +1598,14 @@ class TestCaffe2Backend(unittest.TestCase):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.run_model_test(CeilModel(), train=False, input=x, batch_size=BATCH_SIZE)
 
+    def test_cat_bool(self):
+        class CatBoolModel(torch.nn.Module):
+            def forward(self, input):
+                return torch.cat((input, torch.tensor([False, False], dtype=torch.bool)))
+
+        x = torch.tensor([True, False], dtype=torch.bool)
+        self.run_model_test(CatBoolModel(), train=False, input=x, batch_size=BATCH_SIZE)
+
     def test__dim_arange(self):
         class DimArange(torch.nn.Module):
             def forward(self, input):

@@ -100,6 +100,10 @@ TEST(TestScalar, TestScalar) {
   ASSERT_EQ(scalar_to_tensor(what).scalar_type(), kLong);
   ASSERT_EQ(scalar_to_tensor(ones({}).item()).scalar_type(), kDouble);
 
+  bool b = true;
+  ASSERT_EQ(bool_to_tensor(b).scalar_type(), kBool);
+  ASSERT_EQ(bool_to_tensor(what.toBool()).scalar_type(), kBool);
+
   if (x.scalar_type() != ScalarType::Half) {
     AT_DISPATCH_ALL_TYPES(x.scalar_type(), "foo", [&] {
       scalar_t s = 1;

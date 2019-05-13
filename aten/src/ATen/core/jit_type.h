@@ -654,7 +654,6 @@ struct CAFFE2_API CompleteTensorType : public DimensionedTensorType {
   static const TypeKind Kind = TypeKind::CompleteTensorType;
 
   static TypePtr fromNumberType(TypePtr typ);
-  static TypePtr fromBoolType();
 
 private:
   CompleteTensorType(const at::Tensor& tensor)
@@ -1197,10 +1196,6 @@ inline TypePtr CompleteTensorType::fromNumberType(TypePtr typ) {
     return CompleteTensorType::create(at::kLong, at::kCPU, {});
   }
   AT_ERROR("unknown number type", typ->str());
-}
-
-inline TypePtr CompleteTensorType::fromBoolType() {
-  return CompleteTensorType::create(at::kLong, at::kCPU, {});
 }
 
 inline at::ScalarType scalarTypeFromJitType(const c10::TypePtr& type) {

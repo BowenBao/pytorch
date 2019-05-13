@@ -17,4 +17,8 @@ inline at::Tensor scalar_to_tensor(Scalar s) {
   }
 }
 
+inline at::Tensor bool_to_tensor(bool b) {
+  return at::scalar_tensor(b, at::device(at::kCPU).dtype(at::kBool));
+}
+
 }
