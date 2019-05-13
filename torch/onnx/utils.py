@@ -595,6 +595,7 @@ def _run_symbolic_function(g, n, inputs, env, operator_export_type=OperatorExpor
         elif ns == "prim":
             if op_name == "Constant" and not n.mustBeNone():
                 if n.kindOf("value") == "t":
+                    # TODO: Handle Bool correctly here.
                     return g.op("Constant", value_t=n["value"])
                 elif n.kindOf("value") == "is":
                     value = torch.stack([torch.tensor(v) for v in n["value"]]) if n["value"] else []
