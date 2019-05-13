@@ -42,7 +42,7 @@ Node* InsertCastAndReshapeForCond(Value* cond_val, Graph* graph, Node* consumer_
 
   Node* reshape_node = CreateReshapeNode(cast_node->output(), empty_constant_node->output(), graph);
   reshape_node->insertAfter(empty_constant_node);
-  
+
   consumer_node->replaceInputWith(cond_val, reshape_node->output());
 
   return reshape_node;
@@ -65,7 +65,7 @@ void FixupONNXLoops(Block* block) {
       cond->setType(CompleteTensorType::create(at::kBool, at::kCPU, {}));
       Value* i = sub_block->inputs()[0];
       i->setType(CompleteTensorType::fromNumberType(IntType::get()));
-      
+
       // add cast & reshape to condition input inside the loop.
       Value* next_cond_val = sub_block->outputs()[0];
       InsertCastAndReshapeForCond(next_cond_val, graph, sub_block->return_node());

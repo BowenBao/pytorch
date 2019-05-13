@@ -721,10 +721,7 @@ def lt(g, input, other):
 
 def lt_impl(g, input, other):
     other = sym_help._maybe_get_scalar(other)
-    input = _cast_Float(g, input, False)
-    return g.op("Less", input, _cast_Float(g, sym_help._if_scalar_type_as(g, other, input), False))
-    # NOTE: the above is only to workaround ORT Less type restrictions.
-    # return g.op("Less", input, _if_scalar_type_as(g, other, input))
+    return g.op("Less", input, sym_help._if_scalar_type_as(g, other, input))
 
 
 @wrap_logical_op_with_cast_to_uint8

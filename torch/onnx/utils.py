@@ -183,16 +183,15 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     torch._C._jit_pass_lower_all_tuples(graph)
     torch._C._jit_pass_peephole(graph, True)
     torch._C._jit_pass_lint(graph)
+
     if operator_export_type != OperatorExportTypes.RAW:
         graph = torch._C._jit_pass_onnx(graph, operator_export_type)
-        print('onnx graph', graph)
         torch._C._jit_pass_lint(graph)
         torch._C._jit_pass_onnx_peephole(graph)
         torch._C._jit_pass_lint(graph)
     torch._C._jit_pass_dce(graph)
     torch._C._jit_pass_lint(graph)
     torch._C._jit_pass_fixup_onnx_loops(graph)
-    print('onnx graph after fix loop', graph)
     torch._C._jit_pass_lint(graph)
     graph = torch._C._jit_pass_canonicalize(graph)
     torch._C._jit_pass_lint(graph)
@@ -253,7 +252,6 @@ def _model_to_graph(model, args, verbose=False, training=False,
         try:
             method = model.forward
             params = method.initial_ivalues()
-            print('ptir graph', method.graph)
             graph = _propagate_and_assign_input_and_output_shapes(
                 method.graph, tuple(args) + tuple(params), example_outputs, False, propagate)
         except AttributeError:
