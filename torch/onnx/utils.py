@@ -597,6 +597,9 @@ def _run_symbolic_function(g, n, inputs, env, operator_export_type=OperatorExpor
             if op_name == "Constant" and not n.mustBeNone():
                 if n.kindOf("value") == "t":
                     return g.op("Constant", value_t=n["value"])
+                elif n.kindOf("value") == "i":
+                    from torch.onnx.symbolic_helper import _try_get_scalar_type
+                    return g.constant(n["value"], 0, _try_get_scalar_type(n.output()))
                 elif n.kindOf("value") == "is":
                     value = torch.stack([torch.tensor(v) for v in n["value"]]) if n["value"] else []
                     return g.op("Constant", value_t=value)
@@ -686,6 +689,8 @@ def _graph_constant(g, value, dims, type, *args, **kwargs):
         tensor = torch.FloatTensor(*dims)
     elif type == "double":
         tensor = torch.DoubleTensor(*dims)
+    elif type == "bool":
+        tensor = torch.BoolTensor(*dims)
     else:
         raise ValueError("Unknown type, type should be one of the following strings: "
                          "char, short, int, long, half, float, double")

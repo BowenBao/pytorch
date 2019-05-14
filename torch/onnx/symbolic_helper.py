@@ -238,6 +238,8 @@ def _set_opset_version(opset_version):
 #
 # TODO: remove these once we support Type's in the JIT IR and we can once again
 # use the unified toType operator
+# Related source:
+# https://github.com/onnx/onnx/blob/7a112a6f930aac375da5a38d744ccda93e37632c/onnx/onnx.proto
 cast_pytorch_to_onnx = {
     'Byte': torch.onnx.TensorProtoDataType.UINT8,
     'Char': torch.onnx.TensorProtoDataType.INT8,
@@ -247,6 +249,7 @@ cast_pytorch_to_onnx = {
     'Int': torch.onnx.TensorProtoDataType.INT32,
     'Long': torch.onnx.TensorProtoDataType.INT64,
     'Short': torch.onnx.TensorProtoDataType.INT16,
+    'Bool': torch.onnx.TensorProtoDataType.BOOL,
 }
 
 
@@ -264,30 +267,35 @@ scalar_name_to_pytorch = {
 
 # This indicates each scalar type's corresponding
 # torch type. Related source:
-# https://github.com/pytorch/pytorch/blob/da7468853ae322252270bbb58032668bd21b7457/c10/core/ScalarType.h
-scalar_type_to_pytorch_type = [
-    torch.uint8,    # 0
-    torch.int8,     # 1
-    torch.short,    # 2
-    torch.int,      # 3
-    torch.int64,    # 4
-    torch.half,     # 5
-    torch.float,    # 6
-    torch.double,   # 7
-]
+# https://github.com/pytorch/pytorch/blob/v1.1.0/c10/core/ScalarType.h
+# https://github.com/pytorch/pytorch/blob/v1.1.0/torch/csrc/utils/tensor_dtypes.cpp
+scalar_type_to_pytorch_type = {
+    0: torch.uint8,
+    1: torch.int8,
+    2: torch.short,
+    3: torch.int,
+    4: torch.int64,
+    5: torch.half,
+    6: torch.float,
+    7: torch.double,
+    11: torch.bool,
+}
 
 
 def _cast_func_template(to_i, g, input, non_blocking):
     return g.op("Cast", input, to_i=to_i)
 
 
-scalar_type_to_onnx = [
-    cast_pytorch_to_onnx["Byte"],
-    cast_pytorch_to_onnx["Char"],
-    cast_pytorch_to_onnx["Short"],
-    cast_pytorch_to_onnx["Int"],
-    cast_pytorch_to_onnx["Long"],
-    cast_pytorch_to_onnx["Half"],
-    cast_pytorch_to_onnx["Float"],
-    cast_pytorch_to_onnx["Double"],
-]
+# Related source:
+# https://github.com/pytorch/pytorch/blob/v1.1.0/c10/core/ScalarType.h
+scalar_type_to_onnx = {
+    0: cast_pytorch_to_onnx["Byte"],
+    1: cast_pytorch_to_onnx["Char"],
+    2: cast_pytorch_to_onnx["Short"],
+    3: cast_pytorch_to_onnx["Int"],
+    4: cast_pytorch_to_onnx["Long"],
+    5: cast_pytorch_to_onnx["Half"],
+    6: cast_pytorch_to_onnx["Float"],
+    7: cast_pytorch_to_onnx["Double"],
+    11: cast_pytorch_to_onnx["Bool"],
+}

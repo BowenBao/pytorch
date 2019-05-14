@@ -1620,6 +1620,25 @@ class TestCaffe2Backend(unittest.TestCase):
         x = torch.tensor([True, False], dtype=torch.bool)
         self.run_model_test(CatBoolModel(), train=False, input=x, batch_size=BATCH_SIZE)
 
+    def test_prim_constant_scalar_bool(self):
+        class PrimConstantModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self):
+                return torch.tensor(True, dtype=torch.bool)
+
+        self.run_model_test(PrimConstantModel(), train=False, input=(), batch_size=BATCH_SIZE,
+            example_outputs=torch.tensor(True, dtype=torch.bool))
+
+    def test_prim_constant_scalar_int32(self):
+        class PrimConstantModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self):
+                # TODO: tuple values are not supported. e.g. (1, 2, 3)
+                return torch.tensor([1,2,3], dtype=torch.int32)
+
+        self.run_model_test(PrimConstantModel(), train=False, input=(), batch_size=BATCH_SIZE,
+            example_outputs=torch.tensor([1,2,3], dtype=torch.int32))
+
     def test__dim_arange(self):
         class DimArange(torch.nn.Module):
             def forward(self, input):
@@ -1672,6 +1691,37 @@ class TestCaffe2Backend(unittest.TestCase):
             def forward(self, input):
                 return view_by_prim_shape(input)
         self.run_model_test(PrimShapeModel(), train=False, input=x, batch_size=BATCH_SIZE)
+
+
+    def _prim_constant_scalar_test(self, dtype):
+        class PrimConstantModel(torch.jit.ScriptModule):
+            __constants__ = ['dtype']
+            def __init__(self, dtype):
+                super(PrimConstantModel, self).__init__()
+                self.dtype = dtype
+
+            @torch.jit.script_method
+            def forward(self):
+                return torch.tensor(1, dtype=self.dtype)
+
+        self.run_model_test(PrimConstantModel(dtype), train=False, input=(), batch_size=BATCH_SIZE,
+            example_outputs=torch.tensor(1, dtype=dtype))
+
+
+    def _prim_constant_tensor_test(self, dtype):
+        class PrimConstantModel(torch.jit.ScriptModule):
+            __constants__ = ['dtype']
+            def __init__(self, dtype):
+                super(PrimConstantModel, self).__init__()
+                self.dtype = dtype
+
+            @torch.jit.script_method
+            def forward(self):
+                # TODO: ConstantPropagation fails on float list. e.g. [1., 2., 0.]
+                return torch.tensor([1, 2, 0], dtype=self.dtype)
+
+        self.run_model_test(PrimConstantModel(dtype), train=False, input=(), batch_size=BATCH_SIZE,
+            example_outputs=torch.tensor([1, 2, 0], dtype=dtype))
 
 # a bit of metaprogramming to set up all the rnn tests
 
@@ -1749,6 +1799,48 @@ def setup_rnn_tests():
     # noticing
     assert test_count == 192, test_count
 setup_rnn_tests()
+
+# a bit of metaprogramming to set up all the prim constant tests
+def make_prim_constant_test(is_scalar, dtype):
+    test_name = str('_'.join([
+        'test', 'prim_constant', 'scalar' if is_scalar else 'tensor',
+        str(dtype)[6:] # e.g. torch.int32 -> 'int32'
+    ]))
+
+    def f(self):
+        if is_scalar:
+            self._prim_constant_scalar_test(dtype)
+        else:
+            self._prim_constant_tensor_test(dtype)
+
+    f.__name__ = test_name
+    setattr(TestCaffe2Backend, f.__name__, f)
+
+
+def setup_prim_constant_tests():
+    is_scalar_opts = [
+        True,
+        False
+    ]
+
+    dtype_opts = [
+        torch.uint8,
+        torch.int8,
+        torch.int16,
+        torch.int32,
+        torch.int64,
+        torch.float32,
+        torch.float64,
+        torch.bool,
+    ]
+
+    test_count = 0
+    for (is_scalar, dtype) in itertools.product(is_scalar_opts, dtype_opts):
+        make_prim_constant_test(is_scalar, dtype)
+        test_count += 1
+
+    assert test_count == 16, test_count
+setup_prim_constant_tests()
 
 # add the same test suite as above, but switch embed_params=False
 # to embed_params=True
