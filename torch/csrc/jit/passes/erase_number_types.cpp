@@ -22,15 +22,19 @@ static void EraseNumberTypesOnBlock(Block* block) {
         if (it->output()->type()->isSubtypeOf(NumberType::get()) ||
             it->output()->type()->isSubtypeOf(BoolType::get())) {
           at::Scalar s;
+          at::Tensor t;
           if (it->output()->type()->isSubtypeOf(BoolType::get())) {
-            s = static_cast<int64_t>(*constant_as<bool>(it->output()));
+            // s = static_cast<int64_t>(*constant_as<bool>(it->output()));
+            s = *constant_as<bool>(it->output());
+            t = scalar_to_tensor(s, at::kBool);
           } else {
             s = *constant_as<at::Scalar>(it->output());
+            t = scalar_to_tensor(s);
           }
 
           WithInsertPoint guard(*it);
           Value* r = block->owningGraph()->insertConstant(
-              scalar_to_tensor(s), nullptr, c10::nullopt, it->scope());
+              t, nullptr, c10::nullopt, it->scope());
           it->output()->replaceAllUsesWith(r);
         }
       } break;

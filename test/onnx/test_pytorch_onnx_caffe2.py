@@ -1668,6 +1668,23 @@ class TestCaffe2Backend(unittest.TestCase):
         self.run_model_test(model, train=False, input=(inputs,), batch_size=BATCH_SIZE,
                             example_outputs=(outputs,))
 
+    def test_while_double(self):
+        class WhileModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x):
+                a = 0.0
+                cond = True
+                while cond:
+                    cond = a < 4
+                    a += 1.0
+                return x + a
+
+        model = WhileModel()
+        inputs = torch.zeros(1, 2, 3, dtype=torch.double)
+        outputs = model(inputs)
+        self.run_model_test(model, train=False, input=(inputs,), batch_size=BATCH_SIZE,
+                            example_outputs=(outputs,))
+
     def test_loop(self):
         class LoopModel(torch.jit.ScriptModule):
             @torch.jit.script_method

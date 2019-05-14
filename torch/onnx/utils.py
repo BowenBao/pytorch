@@ -152,6 +152,7 @@ def _split_tensor_list_constants(g, block):
 
 def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=False):
     # Remove fork/wait nodes
+    print('PTIR graph:', graph)
     torch._C._jit_pass_inline_fork_wait(graph)
     torch._C._jit_pass_dce(graph)
     torch._C._jit_pass_lint(graph)
@@ -168,13 +169,11 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     # left behind by things like symbolic_override
     torch._C._jit_pass_dce(graph)
     torch._C._jit_pass_lint(graph)
-
     torch._C._jit_pass_canonicalize_ops(graph)
     torch._C._jit_pass_lint(graph)
 
     torch._C._jit_pass_peephole(graph, True)
     torch._C._jit_pass_lint(graph)
-
     # onnx only supports tensors, but 1 / 2 = 0.5 and tensor(1) / tensor(2) = 0
     torch._C._jit_pass_prepare_division_for_onnx(graph)
     # onnx only supports tensors, so we turn all out number types into tensors
@@ -185,13 +184,16 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     torch._C._jit_pass_lint(graph)
 
     if operator_export_type != OperatorExportTypes.RAW:
+        print('PTIR graph before onnx:', graph)
         graph = torch._C._jit_pass_onnx(graph, operator_export_type)
+        print('ONNX graph before loop:', graph)
         torch._C._jit_pass_lint(graph)
         torch._C._jit_pass_onnx_peephole(graph)
         torch._C._jit_pass_lint(graph)
     torch._C._jit_pass_dce(graph)
     torch._C._jit_pass_lint(graph)
     torch._C._jit_pass_fixup_onnx_loops(graph)
+    print('ONNX graph after loop:', graph)
     torch._C._jit_pass_lint(graph)
     graph = torch._C._jit_pass_canonicalize(graph)
     torch._C._jit_pass_lint(graph)
@@ -596,6 +598,10 @@ def _run_symbolic_function(g, n, inputs, env, operator_export_type=OperatorExpor
             if op_name == "Constant" and not n.mustBeNone():
                 if n.kindOf("value") == "t":
                     # TODO: Handle Bool correctly here.
+                    print('prim constant of t:', n)
+                    print('n value:', n['value'])
+                    print('n value dims:', n['value'].size())
+                    print('n value type:', n['value'].type())
                     return g.op("Constant", value_t=n["value"])
                 elif n.kindOf("value") == "is":
                     value = torch.stack([torch.tensor(v) for v in n["value"]]) if n["value"] else []
