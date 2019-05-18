@@ -176,10 +176,12 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     torch._C._jit_pass_lint(graph)
     # onnx only supports tensors, but 1 / 2 = 0.5 and tensor(1) / tensor(2) = 0
     torch._C._jit_pass_prepare_division_for_onnx(graph)
-    # onnx only supports tensors, so we turn all out number types into tensors
-    torch._C._jit_pass_erase_number_types(graph)
     # onnx does not support tuples, so try to remove them
+    print('PTIR graph before lower tuples:', graph)
     torch._C._jit_pass_lower_all_tuples(graph)
+    # onnx only supports tensors, so we turn all out number types into tensors
+    print('PTIR graph before erase number types:', graph)
+    torch._C._jit_pass_erase_number_types(graph)
     torch._C._jit_pass_peephole(graph, True)
     torch._C._jit_pass_lint(graph)
 
@@ -254,17 +256,25 @@ def _model_to_graph(model, args, verbose=False, training=False,
         try:
             method = model.forward
             params = method.initial_ivalues()
+            print('model.graph', model.graph)
+            in_vars, in_desc = torch.jit._flatten(tuple(args) + tuple(params))
+            out_vars, _ = torch.jit._flatten(tuple(example_outputs))
+            print('out vars shape:', [o.shape for o in list(out_vars)])
             graph = _propagate_and_assign_input_and_output_shapes(
-                method.graph, tuple(args) + tuple(params), example_outputs, False, propagate)
+                method.graph, tuple(in_vars), out_vars, False, propagate)
+            print('graph after propagating', graph)
         except AttributeError:
             raise RuntimeError('\'forward\' method must be a script method')
     elif isinstance(model, torch.jit.Function):
         assert example_outputs is not None, "example_outputs must be provided when exporting a TorchScript Function"
         method = model
         params = ()
-        # TODO: flatten inputs/outputs.
+        print('model.graph', model.graph)
+        in_vars, in_desc = torch.jit._flatten(tuple(args))
+        out_vars, _ = torch.jit._flatten(tuple(example_outputs))
         graph = _propagate_and_assign_input_and_output_shapes(
-            model.graph, tuple(args), example_outputs, False, propagate)
+            model.graph, tuple(in_vars), out_vars, False, propagate)
+        print('graph after propagating', graph)
     else:
         graph, torch_out = _trace_and_get_graph_from_model(model, args, training)
         state_dict = _unique_state_dict(model)
@@ -592,6 +602,7 @@ def _run_symbolic_function(g, n, inputs, env, operator_export_type=OperatorExpor
                                   "torch.onnx.symbolic_opset{}.{} does not exist"
                                   .format(op_name, opset_version, op_name))
                 op_fn = sym_registry.get_registered_op(op_name, '', opset_version)
+                print(op_name)
                 return op_fn(g, *inputs, **attrs)
 
         elif ns == "prim":

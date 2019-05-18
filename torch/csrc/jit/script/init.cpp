@@ -39,6 +39,7 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include <stack>
 
 PYBIND11_MAKE_OPAQUE(torch::jit::script::ExtraFilesMap);
 
@@ -208,20 +209,76 @@ static std::shared_ptr<Graph> _propagate_and_assign_input_and_output_shapes(
     setInputTensorTypes(*retval, fmap<IValue>(inputs));
     PropagateInputShapes(retval);
   }
-  AT_ASSERT(retval->inputs().size() == inputs.size());
-  for (size_t i = 0; i < retval->inputs().size(); ++i) {
-    auto scalar_type = inputs[i].scalar_type();
-    auto sizes = inputs[i].sizes();
-    auto type =
-        torch::jit::CompleteTensorType::create(scalar_type, at::kCPU, sizes);
-    retval->inputs()[i]->setType(type);
+  at::ArrayRef<Value*> input_values = retval->inputs();
+  //   AT_ASSERT(input_values.size() == inputs.size());
+  printf("input values size %zu, input size %zu\n", input_values.size(), inputs.size());
+  size_t input_idx = 0;
+  for (size_t i = 0; i < input_values.size(); ++i) {
+    if (input_values.at(i)->type()->kind() == TupleType::Kind) {
+      printf("input node kind %s\n", input_values.at(i)->node()->kind().toQualString());
+      printf("input size %zu\n", input_values.at(i)->node()->inputs().size());
+      printf("output size %zu\n", input_values.at(i)->node()->outputs().size());
+      AT_ASSERT(input_values.at(i)->node()->kind() == prim::Param);
+      std::vector<TypePtr> types;
+      for (size_t j = 0; j < input_values.at(i)->type()->containedTypes().size(); ++j) {
+        auto scalar_type = inputs[input_idx].scalar_type();
+        auto sizes = inputs[input_idx].sizes();
+        auto type =
+            torch::jit::CompleteTensorType::create(scalar_type, at::kCPU, sizes);
+        types.push_back(type);
+        input_idx++;
+      }
+      input_values[i]->setType(TupleType::create(types));
+    } else {
+        auto scalar_type = inputs[input_idx].scalar_type();
+        auto sizes = inputs[input_idx].sizes();
+        auto type =
+            torch::jit::CompleteTensorType::create(scalar_type, at::kCPU, sizes);
+        input_values[i]->setType(type);
+        input_idx++;
+    }
   }
-  at::ArrayRef<Value*> output_values = retval->outputs();
+  std::vector<Value*> output_values;
+  std::stack<Value*> values_to_flatten;
+  for (auto iter = retval->outputs().rbegin(); iter != retval->outputs().rend(); ++iter) {
+    values_to_flatten.push(*iter);
+  }
+
+  while (!values_to_flatten.empty()) {
+    printf("stack size %zu\n", values_to_flatten.size());
+    auto output_value = values_to_flatten.top();
+    values_to_flatten.pop();
+    if (output_value->type()->kind() == TupleType::Kind) {
+      printf("output value node kind %s\n", output_value->node()->kind().toQualString());
+      // if this is output from subgraph
+      if (output_value->node()->kind() == prim::Loop) {
+        printf("handle output from loops\n");
+        size_t output_idx = 0;
+        for (; output_idx < output_value->node()->outputs().size(); ++output_idx) {
+          if (output_value->node()->outputs()[output_idx] == output_value) {
+            break;
+          }
+        }
+        AT_ASSERT(output_idx < output_value->node()->outputs().size());
+        values_to_flatten.push(output_value->node()->blocks()[0]->outputs()[output_idx + 1]);
+      } else {
+        AT_ASSERT(output_value->node()->kind() == prim::TupleConstruct);
+        for (auto iter = output_value->node()->inputs().rbegin();
+                iter != output_value->node()->inputs().rend(); ++iter) {
+            values_to_flatten.push(*iter);
+        }
+      }
+    } else {
+      output_values.push_back(output_value);
+    }
+  }
+
   // patch this to still work if we are returning a tuple of multiple values
-  if (output_values.at(0)->type()->kind() == TupleType::Kind) {
-    AT_ASSERT(output_values.at(0)->node()->kind() == prim::TupleConstruct);
-    output_values = output_values.at(0)->node()->inputs();
-  }
+//   if (output_values.at(0)->type()->kind() == TupleType::Kind) {
+//     AT_ASSERT(output_values.at(0)->node()->kind() == prim::TupleConstruct);
+//     output_values = output_values.at(0)->node()->inputs();
+//   }
+  printf("output values size %zu, outputs size %zu\n", output_values.size(), outputs.size());
   AT_ASSERT(output_values.size() == outputs.size());
   for (size_t i = 0; i < outputs.size(); ++i) {
     auto scalar_type = outputs[i].scalar_type();
