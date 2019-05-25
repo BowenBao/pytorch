@@ -6,6 +6,7 @@ import torch.onnx
 import torch.onnx.utils
 
 from torch.onnx.symbolic_helper import parse_args, _unimplemented, _black_list_in_opset
+from torch.onnx.symbolic_helper import _parse_arg, _maybe_get_const, _is_value, cast_pytorch_to_onnx
 import torch.onnx.symbolic_opset9
 
 
@@ -33,15 +34,17 @@ for black_listed_op in black_listed_operators:
 
 
 # Add new operator here
-@parse_args('v', 'i', 'i', 'i', 'i')
+@parse_args('v', 'v', 'i', 'i', 'i')
 def topk(g, self, k, dim, largest, sorted, out=None):
     if out is not None:
         _unimplemented("TopK", "Out parameter is not supported for topk")
     if not largest:
         _unimplemented("TopK", "Ascending TopK is not supported")
-    k = g.op("Constant", value_t=torch.tensor(k, dtype=torch.int64))
+    k_value = _maybe_get_const(k, 'i')
+    if not _is_value(k_value):
+        k = g.op("Constant", value_t=torch.tensor(k_value, dtype=torch.int64))
     from torch.onnx.symbolic_opset9 import unsqueeze
-    k = unsqueeze(g, k, 0)
+    k = unsqueeze(g, k_value, 0)
     return g.op("TopK", self, k, axis_i=dim, outputs=2)
 
 
@@ -116,6 +119,47 @@ def _avg_pool(name, tuple_fn):
         return output
     return symbolic_fn
 
+def slice(g, self, dim, start, end, step):
+    if start.node().kind() != 'onnx::Constant' or \
+            end.node().kind() != 'onnx::Constant' or dim.node().kind() != 'onnx::Constant' or \
+            step.node().kind() != 'onnx::Constant':
+        start_unsqueezed = g.op("Unsqueeze", start, axes_i=[0])
+        end_unsqueezed = g.op("Unsqueeze", end, axes_i=[0])
+        dim_unsqueezed = g.op("Unsqueeze", dim, axes_i=[0])
+        step_unsqueezed = g.op("Unsqueeze", step, axes_i=[0])
+        return g.op("Slice", self, start_unsqueezed, end_unsqueezed, dim_unsqueezed, step_unsqueezed)
+    else:
+        start = _parse_arg(start, 'i')
+        end = _parse_arg(end, 'i')
+        dim = _parse_arg(dim, 'i')
+        step = _parse_arg(step, 'i')
+        start_tensor = g.op('Constant', value_t=torch.tensor([start], dtype=torch.long))
+        end_tensor = g.op('Constant', value_t=torch.tensor([end], dtype=torch.long))
+        dim_tensor = g.op('Constant', value_t=torch.tensor([dim], dtype=torch.long))
+        step_tensor = g.op('Constant', value_t=torch.tensor([step], dtype=torch.long))
+        return g.op("Slice", self, start_tensor, end_tensor, dim_tensor, step_tensor)
+
+def upsample_nearest2d(g, input, output_size):
+    output_size = _maybe_get_const(output_size, 'is')
+
+    if _is_value(output_size):
+        div_lhs = g.op('Cast', output_size, to_i=cast_pytorch_to_onnx['Float'])
+        div_rhs = g.op('Cast',
+            g.op('Slice',
+                g.op('Shape', input),
+                g.op('Constant', value_t=torch.tensor([2], dtype=torch.long)),
+                g.op('Constant', value_t=torch.tensor([4], dtype=torch.long))),
+            to_i=cast_pytorch_to_onnx['Float'])
+
+        scales = g.op('Concat', g.op('Constant', value_t=torch.tensor([1., 1.])), g.op('Div', div_lhs, div_rhs), axis_i=0)
+    else:
+        height_scale = float(output_size[-2]) / input.type().sizes()[-2]
+        width_scale = float(output_size[-1]) / input.type().sizes()[-1]
+        scales = g.op("Constant", value_t=torch.tensor([1., 1., height_scale,
+                                                        width_scale]))
+
+    return g.op("Resize", input, scales, #'Upsample' for opset 9
+                mode_s="nearest")
 
 avg_pool1d = _avg_pool('avg_pool1d', _single)
 avg_pool2d = _avg_pool('avg_pool2d', _pair)

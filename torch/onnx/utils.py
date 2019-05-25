@@ -153,6 +153,7 @@ def _split_tensor_list_constants(g, block):
 
 
 def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=False):
+    print('PTIR graph:', graph)
     # Remove fork/wait nodes
     torch._C._jit_pass_inline_fork_wait(graph)
     torch._C._jit_pass_dce(graph)
@@ -197,6 +198,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     torch._C._jit_pass_lint(graph)
     graph = torch._C._jit_pass_canonicalize(graph)
     torch._C._jit_pass_lint(graph)
+    print('ONNX graph:', graph)
     return graph
 
 
@@ -590,6 +592,8 @@ def _run_symbolic_function(g, n, inputs, env, operator_export_type=OperatorExpor
                     warnings.warn("ONNX export failed on ATen operator {} because "
                                   "torch.onnx.symbolic_opset{}.{} does not exist"
                                   .format(op_name, opset_version, op_name))
+                print(n)
+                print('node ', op_name, ' source range', n.sourceRange())
                 op_fn = sym_registry.get_registered_op(op_name, '', opset_version)
                 return op_fn(g, *inputs, **attrs)
 
@@ -636,7 +640,7 @@ def _run_symbolic_function(g, n, inputs, env, operator_export_type=OperatorExpor
                               "Have you registered your symbolic function with "
                               "torch.onnx.register_custom_op_symbolic(symbolic_name, symbolic_fn)?"
                               .format(ns, op_name, opset_version, op_name))
-            symbolic_fn = sym_registry.get_registered_op(symbolic_name, ns, opset_version)
+            symbolic_fn = sym_registry.get_registered_op(op_name, ns, opset_version)
             attrs = {k: n[k] for k in n.attributeNames()}
             return symbolic_fn(g, *inputs, **attrs)
 
