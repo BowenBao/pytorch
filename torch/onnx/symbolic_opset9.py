@@ -1015,7 +1015,8 @@ def max(g, self, dim_or_y=None, keepdim=None):
 def min(g, self, dim_or_y=None, keepdim=None):
     # torch.min(input)
     if dim_or_y is None and keepdim is None:
-        return g.op("ReduceMin", self, keepdims_i=0)
+        #return g.op("ReduceMin", self, keepdims_i=0)
+        return _cast_Long(g, g.op("ReduceMin", _cast_Int(g, self, False), keepdims_i=0), False)
     # torch.min(input, other)
     if keepdim is None:
         return g.op("Min", self, dim_or_y)
@@ -1527,7 +1528,7 @@ def flatten(g, input, start_dim, end_dim):
 
 @parse_args('v')
 def nonzero(g, input):
-    return t(g, g.op('NonZero', input))
+    return t(g, g.op('NonZero', _cast_Float(g, input, False)))
 
 
 @parse_args('v')
