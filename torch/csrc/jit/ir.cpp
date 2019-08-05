@@ -775,6 +775,37 @@ void Value::replaceAllUsesWith(Value* newValue) {
   }
 }
 
+void Value::replaceAllUsesAfterNodeWith(const Node* node, Value* newValue) {
+  // auto u_it_start = std::find_if(uses_.begin(), uses_.end(), [&node](const Use& u){
+  //   return u.user->isAfter(node);
+  // });
+
+  // printf("u_it_start is at pos %d\n", int(u_it_start - uses_.begin()));
+
+  // for (auto u_it = u_it_start; u_it != uses_.end(); ++u_it) {
+  //   u_it->user->inputs_[u_it->offset] = newValue;
+  //   newValue->uses_.push_back(*u_it);
+  // }
+
+  // for (auto u_it = uses_.begin(); u_it != uses_.end(); ++u_it) {
+  //   if (u_it->user->isAfter(node)) {
+  //     u_it->user->inputs_[u_it->offset] = newValue;
+  //     newValue->uses_.push_back(*u_it);
+  //   }
+  // }
+  std::for_each(uses_.begin(), uses_.end(), [&node, newValue](Use &u) {
+    if (u.user->isAfter(node)) {
+      u.user->inputs_[u.offset] = newValue;
+      newValue->uses_.push_back(u);
+    }
+  });
+
+  uses_.erase(std::remove_if(uses_.begin(), uses_.end(), [&node](const Use& u){
+    return u.user->isAfter(node);
+  }), uses_.end());
+  printf("remain uses_ %zu\n", uses_.size());
+}
+
 size_t findArgument(const FunctionSchema& the_schema, Symbol name) {
   auto name_str = name.toUnqualString();
   for (size_t i = 0; i < the_schema.arguments().size(); ++i) {

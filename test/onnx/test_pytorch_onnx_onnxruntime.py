@@ -14,6 +14,7 @@ import itertools
 from torch.nn.utils import rnn as rnn_utils
 from model_defs.lstm_flattening_result import LstmFlatteningResult
 from model_defs.rnn_model_with_packed_sequence import RnnModelWithPackedSequence
+from copy import deepcopy
 from test_pytorch_common import skipIfUnsupportedMinOpsetVersion, skipIfUnsupportedOpsetVersion
 from test_pytorch_common import RNN_BATCH_SIZE, RNN_SEQUENCE_LENGTH, RNN_INPUT_SIZE, RNN_HIDDEN_SIZE
 import model_defs.word_language_model as word_language_model
@@ -30,10 +31,14 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
     with torch.no_grad():
         if isinstance(input, torch.Tensor):
             input = (input,)
+        # backup input. inplace ops in model will alter input values.
+        input_backup = deepcopy(input)
         output = model(*input)
+        input = input_backup
         if isinstance(output, torch.Tensor):
             output = (output,)
 
+        input_backup = deepcopy(input)
         # export the model to ONNX
         f = io.BytesIO()
         torch.onnx.export(model, input, f,
@@ -42,7 +47,7 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
                           do_constant_folding=do_constant_folding,
                           keep_initializers_as_inputs=self.keep_initializers_as_inputs)
 
-        input, _ = torch.jit._flatten(input)
+        input, _ = torch.jit._flatten(input_backup)
         output, _ = torch.jit._flatten(output)
 
         def to_numpy(tensor):
@@ -715,6 +720,29 @@ class TestONNXRuntime(unittest.TestCase):
         dim = 1
         x = torch.randn(3, 4)
         self.run_test(SortModel(dim), x)
+
+    def test_inplace_ops(self):
+        class InPlaceModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x, y):
+                x += y
+                y *= x
+                y /= 2
+                x -= y
+                return x
+
+        class InPlaceModel2(torch.nn.Module):
+            def forward(self, x):
+                y = x.add_(2)
+                x.masked_fill_(x > 0, 1)
+                return y + 1
+
+        x = torch.randint(100, (3, 4))
+        y = torch.randint(100, (3, 4))
+        self.run_test(InPlaceModel(), (x, y))
+
+        x = torch.randint(100, (3, 4))
+        # self.run_test(InPlaceModel2(), (x,))
 
     @skipIfUnsupportedMinOpsetVersion(9)
     def test_masked_fill(self):

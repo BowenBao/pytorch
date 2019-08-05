@@ -15,7 +15,7 @@ bool isInplaceOp(const Node* node) {
 
 // Remove all in-place ops and replace them with out-of-place equivalents.
 // e.g.
-//   %foo = aten::add_(%foo, %n)
+//   %foo.1 = aten::add_(%foo, %n)
 // becomes
 //   %foo.2 = aten::add(%foo, %n)
 //
@@ -45,7 +45,10 @@ void RemoveInplaceOps(Block* block) {
       // Create a new output node and replace all uses of self with it
       newNode->output()->copyMetadata(node->output());
       node->replaceAllUsesWith(newNode);
+      // Replace all uses of input self afterwards with output node.
+      node->input(0)->replaceAllUsesAfterNodeWith(node, newNode->output());
       node->destroy();
+      printf("DEBUG graph: %s\n", graph->toString().c_str());
     }
   }
 }

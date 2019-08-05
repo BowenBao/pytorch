@@ -1911,3 +1911,12 @@ def multinomial(g, input, num_samples, replacement=False, generator=None):
     return g.op("Multinomial", log_input,
                 dtype_i=sym_help.cast_pytorch_to_onnx['Long'],
                 sample_size_i=num_samples)
+def gelu(g, self):
+    # x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+    _sqrt2 = 1.4142135623730951
+    e = erf(g, div(g, self, g.op('Constant', value_t=torch.Tensor([_sqrt2]))))
+    e = add(g, e, g.op('Constant', value_t=torch.Tensor([1.0])))
+    return mul(g, mul(g, self, g.op('Constant', value_t=torch.Tensor([0.5]))), e)
+
+def all(g, self):
+    return g.op("All", self)

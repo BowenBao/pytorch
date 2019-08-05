@@ -196,3 +196,7 @@ def flip(g, input, dims):
                                   starts=[-1] * len(dims),
                                   ends=[-9223372036854775807] * len(dims),
                                   steps=[-1] * len(dims))
+
+
+def remainder(g, self, other):
+    return g.op("Mod", self, other)

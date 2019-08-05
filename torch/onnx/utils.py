@@ -89,12 +89,15 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     # Inline everyting
     torch._C._jit_pass_inline(graph)
 
+    print('PTIR', graph)
     # Remove fork/wait nodes
     torch._C._jit_pass_inline_fork_wait(graph)
     torch._C._jit_pass_dce(graph)
     torch._C._jit_pass_lint(graph)
 
+    print('Pre inplace ops', graph)
     torch._C._jit_pass_remove_inplace_ops(graph)
+    print('After inplace ops', graph)
     # we record now record some ops like ones/zeros
     # into a trace where we previously recorded constants
     # use constant prop to maintain our current level of onnx support
@@ -129,6 +132,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         # onnx only supports tensors, so we turn all out number types into tensors
         torch._C._jit_pass_erase_number_types(graph)
 
+        print('Pre ONNX:', graph)
         graph = torch._C._jit_pass_onnx(graph, operator_export_type)
         torch._C._jit_pass_lint(graph)
         from torch.onnx.symbolic_helper import _export_onnx_opset_version
@@ -146,6 +150,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     torch._C._jit_pass_lint(graph)
     graph = torch._C._jit_pass_canonicalize(graph)
     torch._C._jit_pass_lint(graph)
+    print('ONNX', graph)
     return graph
 
 
@@ -545,6 +550,7 @@ def _run_symbolic_function(g, n, inputs, env, operator_export_type=OperatorExpor
         # See Note [Export inplace]
         # TODO: I think this is not necessary anymore
         if n.kind().endswith('_'):
+            # TODO: print warning here. This means remove_inplace_ops missed this one.
             ns_op_name = n.kind()[:-1]
         else:
             ns_op_name = n.kind()
@@ -572,6 +578,7 @@ def _run_symbolic_function(g, n, inputs, env, operator_export_type=OperatorExpor
                     warnings.warn("ONNX export failed on ATen operator {} because "
                                   "torch.onnx.symbolic_opset{}.{} does not exist"
                                   .format(op_name, opset_version, op_name))
+                print(op_name)
                 op_fn = sym_registry.get_registered_op(op_name, '', opset_version)
                 return op_fn(g, *inputs, **attrs)
 
