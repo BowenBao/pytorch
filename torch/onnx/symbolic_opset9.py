@@ -1771,6 +1771,16 @@ def masked_fill(g, self, mask, value):
     return g.op('Where', mask, sym_help._if_scalar_type_as(g, value, self), self)
 
 
+def masked_select(g, self, mask):
+    index = nonzero(g, expand_as(g, mask, self))
+    return g.op('GatherND', self, index)
+
+
+def masked_scatter(g, self, mask, source):
+    index = nonzero(g, expand_as(g, mask, self))
+    return g.op('ScatterND', self, index, source)
+
+
 def index(g, self, index):
     if sym_help._operator_export_type == torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK:
         return g.op("ATen", self, index, operator_s="index")
