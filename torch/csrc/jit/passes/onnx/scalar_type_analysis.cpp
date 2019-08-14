@@ -107,7 +107,7 @@ static void ImplicitCastForONNXOnBlock(Block* block) {
     if (typesFromScalars.size() == n->inputs().size()) {
       // If all inputs are scalars, infer scalar_type by calling c10::promoteTypes.
       st = promoteScalarTypes(typesFromScalars);
-    } else if (output_st) {
+    } else if (output_st && !IsComparisonOp(n->kind())) {
       st = output_st;
     } else if (!typesFromTensors.empty()) {
       st = typesFromTensors[0];
@@ -129,6 +129,11 @@ static void ImplicitCastForONNXOnBlock(Block* block) {
   auto updateScalarTypeForInputs = [&](Node* n, const c10::ScalarType& scalar_type) {
     const int64_t onnx_type = ScalarTypeToONNXType(scalar_type);
     if (onnx_type < 0) {
+      std::cerr << "Warning: ONNX Scalar Type Analysis - Scalar type: "
+                << c10::toString(scalar_type)
+                << " of input tensor in operator: "
+                << n->kind().toDisplayString()
+                << " not supported in ONNX. " << std::endl;
       return;
     }
 
