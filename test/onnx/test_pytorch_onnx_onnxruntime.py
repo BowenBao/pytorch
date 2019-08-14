@@ -728,6 +728,43 @@ class TestONNXRuntime(unittest.TestCase):
         x = torch.arange(16).view(2, 2, 4).to(torch.float32)
         self.run_test(MaskedFillModel2(), x)
 
+    def test_scalar_type(self):
+        class ArithmeticModel(torch.nn.Module):
+            def forward(self, x):
+                return x.size(0) * 2 * x
+
+        x = torch.ones(2, 3, dtype=torch.float32)
+        self.run_test(ArithmeticModel(), x)
+
+        class ReciprocalModel(torch.nn.Module):
+            def forward(self, x):
+                return torch.reciprocal(x)
+
+        x = torch.tensor([2.0, 4.0], dtype=torch.double)
+        self.run_test(ReciprocalModel(), x)
+
+        class ComparisonModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x.ge(0.5) & y.le(2)
+
+        x = torch.ones(2, 3, dtype=torch.int32)
+        y = torch.ones(2, 3, dtype=torch.float32)
+        self.run_test(ComparisonModel(), (x, y))
+
+        class MatMulModel(torch.nn.Module):
+            def forward(self, x):
+                return (torch.mm(x, x) + x + torch.mm(x, x) + x)
+
+        x = torch.ones(3, 3)
+        self.run_test(MatMulModel(), x)
+
+        class AddMMModel(torch.nn.Module):
+            def forward(self, x):
+                return torch.mm(x, x) + x
+
+        x = torch.ones(3, 3)
+        self.run_test(AddMMModel(), x)
+
     def test_frobenius_norm(self):
         class NormModel(torch.nn.Module):
             def forward(self, x):

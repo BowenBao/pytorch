@@ -84,7 +84,6 @@ def _split_tensor_list_constants(g, block):
 
 
 def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=False):
-    print('PTIR', graph)
     # Remove fork/wait nodes
     torch._C._jit_pass_inline_fork_wait(graph)
     torch._C._jit_pass_dce(graph)
@@ -103,9 +102,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     torch._C._jit_pass_dce(graph)
     torch._C._jit_pass_lint(graph)
 
-    print('Pre canonicalize_ops', graph)
     torch._C._jit_pass_canonicalize_ops(graph)
-    print('Post canonicalize_ops', graph)
     torch._C._jit_pass_lint(graph)
 
     torch._C._jit_pass_peephole(graph, True)
@@ -127,9 +124,12 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         # onnx only supports tensors, so we turn all out number types into tensors
         torch._C._jit_pass_erase_number_types(graph)
 
-        print('Pre ONNX:', graph)
         graph = torch._C._jit_pass_onnx(graph, operator_export_type)
         torch._C._jit_pass_lint(graph)
+
+        torch._C._jit_pass_onnx_scalar_type_analysis(graph)
+        torch._C._jit_pass_lint(graph)
+
         from torch.onnx.symbolic_helper import _export_onnx_opset_version
         torch._C._jit_pass_onnx_peephole(graph, _export_onnx_opset_version)
         torch._C._jit_pass_lint(graph)
@@ -145,7 +145,6 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     torch._C._jit_pass_lint(graph)
     graph = torch._C._jit_pass_canonicalize(graph)
     torch._C._jit_pass_lint(graph)
-    print('ONNX', graph)
     return graph
 
 
@@ -173,7 +172,7 @@ def _trace_and_get_graph_from_model(model, args, training):
     # can turn training=True (or None, to preserve whatever the original
     # training mode was.)
     with set_training(model, training):
-        trace, torch_out = torch.jit.get_trace_graph(model, args, _force_outplace=False)
+        trace, torch_out = torch.jit.get_trace_graph(model, args, _force_outplace=True)
 
     if orig_state_dict_keys != _unique_state_dict(model).keys():
         raise RuntimeError("state_dict changed after running the tracer; "
