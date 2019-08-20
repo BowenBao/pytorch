@@ -199,4 +199,10 @@ def flip(g, input, dims):
 
 
 def remainder(g, self, other):
-    return g.op("Mod", self, other)
+    div = g.op("Div", input, other)
+    if input.type().scalarType() != 'Int':
+        div = g.op("Floor", div)
+    quo = g.op("Mul", div, other)
+    dtype = input.type().scalarType()
+    return g.op("Cast", g.op("Sub", input, quo), to_i=sym_help.cast_pytorch_to_onnx[dtype])
+    # return g.op("Mod", self, other, fmod_i=1)

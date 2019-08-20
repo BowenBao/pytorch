@@ -731,7 +731,16 @@ class TestONNXRuntime(unittest.TestCase):
                 x -= y
                 return x
 
-        class InPlaceModel2(torch.nn.Module):
+        class InPlaceModel3(torch.nn.Module):
+            def forward(self, x, y):
+                x += y
+                y *= x
+                y /= 2
+                x -= y
+                return x
+
+        class InPlaceModel2(torch.jit.ScriptModule):
+            @torch.jit.script_method
             def forward(self, x):
                 y = x.add_(2)
                 x.masked_fill_(x > 0, 1)
@@ -741,8 +750,32 @@ class TestONNXRuntime(unittest.TestCase):
         y = torch.randint(100, (3, 4))
         self.run_test(InPlaceModel(), (x, y))
 
-        x = torch.randint(100, (3, 4))
-        # self.run_test(InPlaceModel2(), (x,))
+        self.run_test(InPlaceModel3(), (x, y))
+
+        x = torch.randn(3, 4)
+        self.run_test(InPlaceModel2(), (x,))
+
+    def test_remainder(self):
+        class RemainderModel(torch.nn.Module):
+            def forward(self, input):
+                # return torch.remainder(input, other)
+                return torch.remainder(input, 1.5)
+
+        # x = torch.randn(1, 2, 3)
+        # y = torch.randn(1, 2, 1)
+        # print(x)
+        # print(y)
+        x = torch.tensor(10)
+        self.run_test(RemainderModel(), x)
+
+    def test_remainder_scalar(self):
+        class RemainderModel(torch.nn.Module):
+            def forward(self, input, other):
+                return torch.remainder(input, other)
+
+        x = torch.randint(10, (2, 3)).to(dtype=torch.int)
+        y = torch.tensor(1).to(dtype=torch.int)
+        self.run_test(RemainderModel(), (x, y))
 
     @skipIfUnsupportedMinOpsetVersion(9)
     def test_masked_fill(self):
