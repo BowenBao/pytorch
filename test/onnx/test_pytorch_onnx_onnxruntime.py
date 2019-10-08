@@ -1014,6 +1014,31 @@ class TestONNXRuntime(unittest.TestCase):
         x = torch.randn(3, 4, 5)
         self.run_test(UnbindModel2(), x)
 
+    @skipIfUnsupportedMinOpsetVersion(11)
+    def test_unbind_dynamic(self):
+        class UnbindModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, input):
+                return input.unbind()[1]
+
+        x = torch.randn(3, 4, 5)
+        self.run_test(UnbindModel(), x)
+
+    @skipIfUnsupportedMinOpsetVersion(11)
+    def test_getitem(self):
+        class GetItemModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x, y, z, ind):
+                # this will create prim::ListConstruct(x, y, z) + prim::__getitem_
+                arr = [x, y, z]
+                return arr[ind]
+
+        x = torch.randn(3, 4, 5)
+        y = torch.randn(1, 4, 5)
+        z = torch.randn(2, 4, 5)
+        ind = torch.tensor(1, dtype=torch.long)
+        self.run_test(GetItemModel(), (x, y, z, ind))
+
     @skipIfUnsupportedMinOpsetVersion(9)
     def test_tensor_factories(self):
         class TensorFactory(torch.nn.Module):
