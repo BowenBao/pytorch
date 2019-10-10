@@ -518,7 +518,7 @@ static void replaceInputWithList(Node* node, size_t i, ArrayRef<Value*> to) {
   }
 }
 
-static void eraseListConstruct(Block* block) {
+static void eraseListConstruct(Block* block, int opset_version) {
   // TODO: Fix this pass/maybe get rid of this part.
   // Tensor lists might be used for meshgrid and such ops as well.
   for (auto it = block->nodes().begin(), end = block->nodes().end();
@@ -527,7 +527,7 @@ static void eraseListConstruct(Block* block) {
     ++it;
 
     for (auto b : n->blocks()) {
-      eraseListConstruct(b);
+      eraseListConstruct(b, opset_version);
     }
     std::vector<std::tuple<size_t, std::vector<Value*>>> replacements;
 
@@ -563,13 +563,20 @@ static void eraseListConstruct(Block* block) {
               i, std::vector<Value*>({concat_node->output()}));
 
         } else {
-          // Tensor lists are used mostly for inputs to cat/stack. They are
-          // already handled in those symbolics, and should become dead
-          // afterwards.
-          replacements.emplace_back(
-              i,
-              std::vector<Value*>(
-                  lc_node->inputs().begin(), lc_node->inputs().end()));
+          if (opset_version < 11) {
+            // Tensor lists are used mostly for inputs to cat/stack. They are
+            // already handled in those symbolics, and should become dead
+            // afterwards.
+            replacements.emplace_back(
+                i,
+                std::vector<Value*>(
+                    lc_node->inputs().begin(), lc_node->inputs().end()));
+          } else {
+            Node* seq_construct_node = block->owningGraph()->create(onnx::SequenceConstruct, {lc_node->inputs()}, 1);
+            seq_construct_node->insertBefore(lc_node);
+            seq_construct_node->output()->copyMetadata(lc_node->output());
+            lc_node->replaceAllUsesWith(seq_construct_node);
+          }
         }
       }
       i++;
@@ -608,7 +615,7 @@ static void fuseSplitListUnpack(Block* b) {
   }
 }
 
-// Unbind is being converted to ONNX as Split + Squeeze.
+// Traced Unbind is being converted to ONNX as Split + Squeeze.
 // Example IR
 // graph(%0 : Float(3, 4, 5)):
 //   %7 : Long() = prim::Constant[value={0}]()
@@ -669,6 +676,52 @@ static void fuseListConstructListUnpack(Block *b) {
   }
 }
 
+// Scripted Unbind is being converted to ONNX as SplitToSequence
+// Example IR
+// graph(%input.1 : Float(3, 4, 5)):
+//   %5 : Long() = prim::Constant[value={0}]()
+//   %6 : Long() = prim::Constant[value={1}]()
+//   %3 : Tensor[] = aten::unbind(%input.1, %5)
+//   %4 : Tensor = aten::__getitem__(%3, %6)
+//   return (%4)
+//
+// Translates to ONNX
+// graph(%input.1 : Float(3, 4, 5)):
+//   %1 : Long() = onnx::Constant[value={1}]()
+//   %2 : Tensor[] = onnx::SplitToSequence[axis=0, keepdims=0](%input.1)
+//   %3 : Tensor = onnx::SequenceAt(%2, %1)
+//   return (%3)
+static void convertDynamicUnbindToSplit(Block *b, int opset_version) {
+  for (auto it = b->nodes().begin(), end = b->nodes().end(); it != end; ++it) {
+    for (auto* child_block : it->blocks()) {
+      convertDynamicUnbindToSplit(child_block, opset_version);
+    }
+
+    if (it->kind() == aten::unbind) {
+      if (opset_version < 11) {
+        AT_ERROR("Dynamic unbind(dynamic number of outputs) is not exportable in opset version ", opset_version,
+            ". Please try exporting with opset version >= 11.");
+      }
+      auto dim = it->i(attr::axis);
+
+      Node* seq_split_node =
+          b->owningGraph()->create(onnx::SplitToSequence, {it->input()}, it->outputs().size());
+      seq_split_node->i_(attr::axis, dim);
+      seq_split_node->i_(attr::keepdims, 0);
+      seq_split_node->output()->copyMetadata(it->output());
+      seq_split_node->insertAfter(*it);
+      it->replaceAllUsesWith(seq_split_node);
+      it->removeAllInputs();
+      it.destroyCurrent();
+    }
+  }
+}
+
+static void convertUnbindToSplit(Block *b, int opset_version) {
+  fuseUnbindListUnpack(b);
+  convertDynamicUnbindToSplit(b, opset_version);
+}
+
 void removeMaxPoolUnusedOutput(Block* b) {
   for (auto it = b->nodes().begin(), end = b->nodes().end(); it != end; ++it) {
     auto n = *it;
@@ -721,7 +774,9 @@ void PeepholeOptimizeONNX(std::shared_ptr<Graph>& graph, int opset_version, bool
   fuseListConstructListUnpack(graph->block());
   fuseSplitListUnpack(graph->block());
   fuseUnbindListUnpack(graph->block());
-  eraseListConstruct(graph->block());
+  eraseListConstruct(graph->block(), opset_version);
+  fuseSplitListUnpack(graph->block());
+  convertUnbindToSplit(graph->block(), opset_version);
   removeMaxPoolUnusedOutput(graph->block());
 }
 

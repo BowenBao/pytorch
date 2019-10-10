@@ -78,6 +78,9 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
                            fixed_batch_size=fixed_batch_size)
 
         # compute onnxruntime output prediction
+        import onnx
+        model = onnx.load_model_from_string(f.getvalue())
+        print(model)
         ort_sess = onnxruntime.InferenceSession(f.getvalue())
         input_copy = copy.deepcopy(input)
         ort_test_with_input(ort_sess, input_copy, output, rtol, atol)
@@ -1151,6 +1154,133 @@ class TestONNXRuntime(unittest.TestCase):
 
         x = torch.randn(3, 4, 5)
         self.run_test(UnbindModel2(), x)
+
+    @skipIfUnsupportedMinOpsetVersion(11)
+    def test_unbind_dynamic(self):
+        class UnbindModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, input):
+                return input.unbind()[1]
+
+        x = torch.randn(3, 4, 5)
+        self.run_test(UnbindModel(), x)
+
+    def test_split(self):
+        class SplitModel(torch.nn.Module):
+            def forward(self, input):
+                return input.split([2, 1, 2])
+
+        x = torch.randn(5, 4, 3)
+        self.run_test(SplitModel(), x)
+
+    @skipIfUnsupportedMinOpsetVersion(11)
+    def test_split_dynamic(self):
+        class SplitModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, input):
+                a, b, c = input.split(2)
+                return a, b, c
+
+        x = torch.randn(5, 4, 3)
+        self.run_test(SplitModel(), x)
+
+    @skipIfUnsupportedMinOpsetVersion(11)
+    def test_getitem(self):
+        class GetItemModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x, y, z, ind):
+                # this will create prim::ListConstruct(x, y, z) + prim::__getitem_
+                arr = [x, y, z]
+                return arr[ind]
+
+        x = torch.randn(3, 4, 5)
+        y = torch.randn(1, 4, 5)
+        z = torch.randn(2, 4, 5)
+        ind = torch.tensor(1, dtype=torch.long)
+        self.run_test(GetItemModel(), (x, y, z, ind))
+
+    def test_concat(self):
+        class ConcatModel(torch.nn.Module):
+            def forward(self, x, y, z):
+                return torch.cat((x, y, z))
+
+        x = torch.randn(3, 4, 5)
+        y = torch.randn(1, 4, 5)
+        z = torch.randn(2, 4, 5)
+        self.run_test(ConcatModel(), (x, y, z))
+
+    @skipIfUnsupportedMinOpsetVersion(11)
+    def test_concat_dynamic(self):
+        class ConcatDynamicModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x):
+                return torch.cat(x.unbind())
+
+        x = torch.randn(4, 5, 6)
+        self.run_test(ConcatDynamicModel(), x)
+
+    def test_stack(self):
+        class StackModel(torch.nn.Module):
+            def forward(self, x, y, z):
+                return torch.stack((x, y, z), 1)
+
+        x = torch.randn(3, 4, 5)
+        y = torch.randn(3, 4, 5)
+        z = torch.randn(3, 4, 5)
+        self.run_test(StackModel(), (x, y, z))
+
+    @skipIfUnsupportedMinOpsetVersion(11)
+    def test_stack_dynamic(self):
+        class StackDynamicModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x):
+                return torch.stack(x.unbind(), 1)
+
+        x = torch.randn(4, 5, 6)
+        self.run_test(StackDynamicModel(), x)
+
+    def test_loop_dynamic(self):
+        class LoopModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x):
+                for i in range(x.size(2)):
+                    x = x + i
+                return x
+
+        model = LoopModel()
+        inputs = torch.zeros(1, 2, 3, dtype=torch.long)
+        self.run_test(model, inputs)
+
+    @skipIfUnsupportedMinOpsetVersion(9)
+    def test_loop_nested(self):
+        class NestedLoopsModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x):
+                for i in range(5):
+                    a = 0
+                    while a < 4:
+                        a += 1
+                    x = x + a
+                return x
+
+        model = NestedLoopsModel()
+        inputs = torch.zeros(1, 2, 3, dtype=torch.long)
+        self.run_test(model, inputs)
+
+    @skipIfUnsupportedMinOpsetVersion(11)
+    def test_loop_with_list(self):
+        class ListLoopModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x):
+                res = []
+                arr = x.split([3, 4, 1, 1, 2, 3, 2], 0)
+                for i in range(len(arr)):
+                    res.append(arr[i].sum(0, True))
+                return torch.cat(res)
+
+        model = ListLoopModel()
+        inputs = torch.randn(16, 4, 5, dtype=torch.long)
+        self.run_test(model, inputs)
 
     @skipIfUnsupportedMinOpsetVersion(9)
     def test_tensor_factories(self):
