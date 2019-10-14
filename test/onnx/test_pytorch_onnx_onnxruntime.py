@@ -1279,7 +1279,7 @@ class TestONNXRuntime(unittest.TestCase):
                 return torch.cat(res)
 
         model = ListLoopModel()
-        inputs = torch.randn(16, 4, 5, dtype=torch.long)
+        inputs = torch.randn(16, 4, 5)
         self.run_test(model, inputs)
 
     @skipIfUnsupportedMinOpsetVersion(9)

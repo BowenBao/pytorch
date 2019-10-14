@@ -102,7 +102,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     # without implementing symbolics for all of them
     if _disable_torch_constant_prop is False:
         torch._C._jit_pass_constant_propagation(graph)
-    print(graph)    
+    print(graph)
     _split_tensor_list_constants(graph, graph)
     # run dce to eliminate dead parts of the graph that might have been
     # left behind by things like symbolic_override
@@ -125,9 +125,9 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         torch._C._jit_pass_prepare_division_for_onnx(graph)
 
         torch._C._jit_pass_onnx_remove_print(graph)
-
+        print(graph)
         torch._C._jit_pass_onnx_preprocess_caffe2(graph)
-
+        print('After preprocess caffe2', graph)
         # onnx only supports tensors, so we turn all out number types into tensors
         torch._C._jit_pass_erase_number_types(graph)
 

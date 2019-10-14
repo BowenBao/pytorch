@@ -175,6 +175,10 @@ def __getitem_(g, self, i):
     return g.op("SequenceAt", self, i)
 
 
+def append(g, self, tensor):
+    return g.op("SequenceInsert", self, tensor)
+
+
 def cat(g, tensor_list, dim):
     if sym_help._is_packed_list(tensor_list):
         from torch.onnx.symbolic_opset9 import cat as cat_opset9
