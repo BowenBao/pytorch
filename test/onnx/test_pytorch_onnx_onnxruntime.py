@@ -1275,8 +1275,8 @@ class TestONNXRuntime(unittest.TestCase):
                 res = []
                 arr = x.split([3, 4, 1, 1, 2, 3, 2], 0)
                 for i in range(len(arr)):
-                    res.append(arr[i].sum(0, True))
-                return torch.cat(res)
+                    res = res.append(arr[i].sum(0, True))
+                return torch.stack(res)
 
         model = ListLoopModel()
         inputs = torch.randn(16, 4, 5)

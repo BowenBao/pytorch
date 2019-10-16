@@ -199,6 +199,8 @@ namespace c10 {
   _(onnx, Mod)                       \
   _(onnx, SplitToSequence)           \
   _(onnx, SequenceConstruct)         \
+  _(onnx, SequenceInsert)            \
+  _(onnx, SequenceEmpty)             \
   FORALL_ATTR_BASE_SYMBOLS(_)        \
   _(attr, Subgraph)                  \
   _(attr, ReverseSubgraph)           \

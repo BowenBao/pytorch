@@ -716,7 +716,8 @@ static void convertDynamicUnbindToSplit(Block *b, int opset_version) {
     }
   }
 }
-
+// TODO: Convert Dynamic Split cases to Split To Sequence.
+// TODO: Add pass to fuse Split + Concat, Concat + Split.
 static void convertUnbindToSplit(Block *b, int opset_version) {
   fuseUnbindListUnpack(b);
   convertDynamicUnbindToSplit(b, opset_version);
