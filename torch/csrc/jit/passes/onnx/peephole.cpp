@@ -723,6 +723,59 @@ static void convertUnbindToSplit(Block *b, int opset_version) {
   convertDynamicUnbindToSplit(b, opset_version);
 }
 
+static void convertSplitToDynamic(Block *b, int opset_version) {
+  if (opset_version < 11) {
+    return;
+  }
+
+  for (auto it = b->nodes().begin(), end = b->nodes().end(); it != end; ++it) {
+    for (auto* child_block : it->blocks()) {
+      convertSplitToDynamic(child_block, opset_version);
+    }
+
+    if (it->kind() == onnx::Split) {
+      // TODO: check output kind is tensor[]
+      if (it->output()->type()->kind() == TypeKind::ListType) {
+        auto dim = it->i(attr::axis);
+        auto split = it->is(attr::split);
+        Node* split_const_node =
+            b->owningGraph()->create(onnx::Constant, 1);
+        // at::from_blob(split.data(), {static_cast<int64_t>(split.size())}, at::kLong)
+        auto tensor = at::empty(split.size(), c10::kLong);
+        int64_t* data = tensor.data<int64_t>();
+        for (size_t i = 0; i < split.size(); ++i) {
+          *data++ = split[i];
+        }
+        split_const_node->t_(
+            attr::value,
+            autograd::make_variable(tensor));
+        split_const_node->insertBefore(*it);
+        Node* seq_split_node =
+            b->owningGraph()->create(onnx::SplitToSequence, {it->input(), split_const_node->output()});
+        seq_split_node->i_(attr::axis, dim);
+        seq_split_node->output()->copyMetadata(it->output());
+        seq_split_node->insertAfter(*it);
+        it->replaceAllUsesWith(seq_split_node);
+        it->removeAllInputs();
+        it.destroyCurrent();
+      }
+      // if (it->outputs().size() == 1 && it->output()->type()->kind())
+
+      // auto dim = it->i(attr::axis);
+
+      // Node* seq_split_node =
+      //     b->owningGraph()->create(onnx::SplitToSequence, {it->input()}, it->outputs().size());
+      // seq_split_node->i_(attr::axis, dim);
+      // seq_split_node->i_(attr::keepdims, 0);
+      // seq_split_node->output()->copyMetadata(it->output());
+      // seq_split_node->insertAfter(*it);
+      // it->replaceAllUsesWith(seq_split_node);
+      // it->removeAllInputs();
+      // it.destroyCurrent();
+    }
+  }
+}
+
 void removeMaxPoolUnusedOutput(Block* b) {
   for (auto it = b->nodes().begin(), end = b->nodes().end(); it != end; ++it) {
     auto n = *it;
@@ -778,6 +831,7 @@ void PeepholeOptimizeONNX(std::shared_ptr<Graph>& graph, int opset_version, bool
   eraseListConstruct(graph->block(), opset_version);
   fuseSplitListUnpack(graph->block());
   convertUnbindToSplit(graph->block(), opset_version);
+  convertSplitToDynamic(graph->block(), opset_version);
   removeMaxPoolUnusedOutput(graph->block());
 }
 
