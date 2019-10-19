@@ -572,10 +572,11 @@ static void eraseListConstruct(Block* block, int opset_version) {
                 std::vector<Value*>(
                     lc_node->inputs().begin(), lc_node->inputs().end()));
           } else {
-            Node* seq_construct_node = block->owningGraph()->create(onnx::SequenceConstruct, {lc_node->inputs()}, 1);
-            seq_construct_node->insertBefore(lc_node);
-            seq_construct_node->output()->copyMetadata(lc_node->output());
-            lc_node->replaceAllUsesWith(seq_construct_node);
+            c10::Symbol seq_node_kind = lc_node->inputs().size() > 0 ? onnx::SequenceConstruct : onnx::SequenceEmpty;
+            Node* seq_node = block->owningGraph()->create(seq_node_kind, {lc_node->inputs()}, 1);
+            seq_node->insertBefore(lc_node);
+            seq_node->output()->copyMetadata(lc_node->output());
+            lc_node->replaceAllUsesWith(seq_node);
           }
         }
       }

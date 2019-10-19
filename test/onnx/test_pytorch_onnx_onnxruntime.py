@@ -1282,6 +1282,27 @@ class TestONNXRuntime(unittest.TestCase):
         inputs = torch.randn(16, 4, 5)
         self.run_test(model, inputs)
 
+    @skipIfUnsupportedMinOpsetVersion(11)
+    def test_list(self):
+        class ListModel(torch.jit.ScriptModule):
+            @torch.jit.script_method
+            def forward(self, x):
+                tensors = x.unbind()
+                res = []
+                res = res.append(tensors[0])
+                res = res.append(tensors[1])
+                to_remove = res[1]
+                # res.remove(to_remove)
+                res.pop(1)
+                # TODO: fix inplace issue for append and insert.
+                # res.insert(0, tensors[1])
+                # res = res.append(tensors[2])
+                return torch.ones(len(res))
+
+        model = ListModel()
+        inputs = torch.randn(16, 1)
+        self.run_test(model, inputs)
+
     @skipIfUnsupportedMinOpsetVersion(9)
     def test_tensor_factories(self):
         class TensorFactory(torch.nn.Module):

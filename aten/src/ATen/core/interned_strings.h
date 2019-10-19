@@ -161,6 +161,7 @@ namespace c10 {
   _(aten, clear)                     \
   _(aten, setdefault)                \
   _(aten, bin)                       \
+  _(aten, pop)                       \
   _(prim, unchecked_unwrap_optional) \
   _(aten, __contains__)              \
   _(prim, BailoutTemplate)           \

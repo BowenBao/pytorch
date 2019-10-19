@@ -179,6 +179,14 @@ def append(g, self, tensor):
     return g.op("SequenceInsert", self, tensor)
 
 
+# def remove(g, ):
+#     return g.op("SequenceErase, ")
+
+
+def pop(g, tensor_list, dim):
+    return g.op("SequenceErase", tensor_list, dim)
+
+
 def cat(g, tensor_list, dim):
     if sym_help._is_packed_list(tensor_list):
         from torch.onnx.symbolic_opset9 import cat as cat_opset9
