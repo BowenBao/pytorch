@@ -9,6 +9,7 @@
 #include <torch/csrc/jit/instruction.h>
 
 #include <onnx/onnx_pb.h>
+#include <onnx/checker.h>
 
 #include <ATen/ATen.h>
 #include <c10/util/Optional.h>
@@ -89,8 +90,7 @@ void validateBlock(
       bool is_aten_enabled = operator_export_type ==
               onnx_torch::OperatorExportTypes::ONNX_ATEN_FALLBACK ||
           operator_export_type == onnx_torch::OperatorExportTypes::ONNX_ATEN;
-      if (!node->kind().is_onnx() && !node->kind().is_caffe2() &&
-          !is_aten_enabled && !node->mustBeNone()) {
+      if (node->kind().is_aten() && !is_aten_enabled && !node->mustBeNone()) {
         FAIL_EXPORT(
             "Couldn't export operator " + node->kind().toDisplayString() +
             "\n\nDefined at:\n" + getNodeStackTraceString(node));
@@ -337,8 +337,15 @@ void EncoderBase::EncodeBlock(
       EncodeIntermediateValueInfo(graph_proto, output);
     }
     if (!node->kind().is_onnx()) {
-      p_n->set_domain(node->kind().domainString());
-      domains_.insert(node->kind().domainString());
+      std::string domain;
+      if (node->kind().is_aten() || node->kind().is_caffe2()) {
+        domain = node->kind().domainString();
+      }
+      else {  //  Custom namespace and domain
+        domain = node->kind().ns().toUnqualString();
+      }
+      domains_.insert(domain);
+      p_n->set_domain(domain);
     }
     if (is_raw_export) {
       AT_ASSERT(!node->kind().is_onnx());
@@ -780,6 +787,14 @@ std::tuple<std::string, RawDataExportMap> export_onnx(
       strip_doc_string,
       keep_initializers_as_inputs,
       add_node_names);
+  // experiment: try run checker on the proto.
+  auto model_proto_str = graph_encoder.get_model_proto().SerializeAsString();
+  onnx::ModelProto decoded_model;
+  decoded_model.ParseFromString(model_proto_str);
+  printf("Running ONNX checker for model.\n");
+  onnx::checker::check_model(decoded_model);
+  printf("Running ONNX checker finished\n");
+
   return std::make_tuple(
       graph_encoder.get_model_proto().SerializeAsString(),
       graph_encoder.get_raw_data_export_map());

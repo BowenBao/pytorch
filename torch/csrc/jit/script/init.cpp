@@ -786,6 +786,9 @@ void initJitScriptBindings(PyObject* module) {
           "graph",
           [](const StrongFunctionPtr& self) { return self.function_->graph(); })
       .def_property_readonly(
+          "_profiled_graph",
+          [](const StrongFunctionPtr& self) { return self.function_->get_executor().getProfiledGraph(); })
+      .def_property_readonly(
           "schema",
           [](const StrongFunctionPtr& self) {
             return self.function_->getSchema();
@@ -825,6 +828,9 @@ void initJitScriptBindings(PyObject* module) {
       .def_property_readonly(
           "schema", [](Method& m) { return m.function().getSchema(); })
       .def_property_readonly("name", &Method::name)
+      .def_property_readonly("_profiled_graph", [](Method& self) {
+        return self.get_executor().getProfiledGraph();
+      })
       .def_property_readonly("code", [](Method& self) {
         std::vector<at::Tensor> tensors;
         std::vector<c10::NamedTypePtr> deps;
@@ -843,6 +849,11 @@ void initJitScriptBindings(PyObject* module) {
         TORCH_INTERNAL_ASSERT(name.name() == def.name().name());
         return script_compile_function(name, def, defaults, std::move(rcb));
       });
+  m.def(
+    "_profiled_graph",
+    [](Method& self) {
+      return self.get_executor().getProfiledGraph();
+    });
   m.def(
       "_jit_script_compile_overload",
       [](const std::string& qualname,
@@ -979,6 +990,14 @@ void initJitScriptBindings(PyObject* module) {
   m.def(
       "_propagate_and_assign_input_shapes",
       _propagate_and_assign_input_shapes);
+  m.def(
+      "_jit_get_profiled_graph",
+      [](std::shared_ptr<Graph> graph, const std::vector<at::Tensor>& inputs) {
+        auto executor = GraphExecutor(graph);
+        Stack stack(fmap<IValue>(inputs));
+        executor.getPlanFor(stack);
+        return executor.getProfiledGraph();
+      });
   m.def("_assign_output_shapes", _assign_output_shapes);
   m.def(
       "_last_executed_optimized_graph",

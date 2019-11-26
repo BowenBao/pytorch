@@ -132,10 +132,13 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         # onnx only supports tensors, so we turn all out number types into tensors
         torch._C._jit_pass_erase_number_types(graph)
 
+        print('pre onnx:', graph)
         graph = torch._C._jit_pass_onnx(graph, operator_export_type)
+        print('post onnx:', graph)
         torch._C._jit_pass_lint(graph)
 
         torch._C._jit_pass_onnx_scalar_type_analysis(graph)
+        print('post scalar:', graph)
         torch._C._jit_pass_lint(graph)
 
         from torch.onnx.symbolic_helper import _export_onnx_opset_version
@@ -153,6 +156,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     torch._C._jit_pass_lint(graph)
     graph = torch._C._jit_pass_canonicalize(graph)
     torch._C._jit_pass_lint(graph)
+    print('onnx:', graph)
     return graph
 
 
@@ -273,8 +277,19 @@ def _model_to_graph(model, args, verbose=False, training=False,
     if isinstance(model, torch.jit.ScriptModule):
         assert example_outputs is not None, "example_outputs must be provided when exporting a ScriptModule"
         try:
-            method_graph, params = torch._C._jit_pass_lower_graph(model.forward.graph, model._c)
+            # method_graph, params = torch._C._jit_pass_lower_graph(model.forward.graph, model._c)
+            # warm-up run
+            _ = model(*args)
+            print('profiled graph:', model.forward._profiled_graph)
+            method_graph, params = torch._C._jit_pass_lower_graph(model.forward._profiled_graph, model._c)
             in_vars, in_desc = torch.jit._flatten(tuple(args) + tuple(params))
+            # print('before profiled graph')
+            # print(tuple(in_vars))
+            # method_graph, _ = torch._C._jit_pass_lower_graph(model.forward._get_profiled_graph(tuple(in_vars)), model._c)
+            # print(method_graph)
+            # graph = torch._C._jit_get_profiled_graph(method_graph, tuple(in_vars))
+
+            # print('after profiled graph', graph)
             graph = _propagate_and_assign_input_shapes(
                 method_graph, tuple(in_vars), False, propagate)
         except AttributeError:

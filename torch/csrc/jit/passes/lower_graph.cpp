@@ -87,6 +87,8 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
              "attribute but found "
           << *e.n;
     }
+    // TODO: if attribute is a constant, insert as constant instead of input.
+    
     size_t slot_idx = e.mod->type()->getAttributeSlot(e.n->s(attr::name));
     auto iv = e.mod->getSlot(slot_idx);
     if (ClassTypePtr c = e.n->output()->type()->cast<ClassType>()) {
@@ -118,6 +120,14 @@ static std::vector<at::Tensor> loadTensors(const std::vector<Slot>& slots) {
   std::vector<at::Tensor> result;
   result.reserve(slots.size());
   for (const Slot& slot : slots) {
+    auto value = slot.obj->getSlot(slot.offset);
+    if (value.isBool()) {
+      // result.emplace_back();
+      printf("this slot is bool, value is %d\n", value.toBool());
+    }
+    // else {
+    //  result.emplace_back(value.toTensor());
+    // }
     result.emplace_back(slot.obj->getSlot(slot.offset).toTensor());
   }
   return result;
@@ -127,6 +137,7 @@ std::pair<std::shared_ptr<Graph>, std::vector<at::Tensor>> LowerGraph(
     Graph& graph,
     const ModulePtr& self) {
   auto result = lower_graph(self, graph);
+  printf("lowered graph: %s\n", result.first->toString().c_str());
   return std::make_pair(result.first, loadTensors(result.second));
 }
 

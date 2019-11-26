@@ -95,6 +95,34 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
                     output = (output,)
                 ort_test_with_input(ort_sess, test_input, output, rtol, atol)
 
+        # additional scripting tests
+        script_module = torch.jit.script(model)
+        input_copy = copy.deepcopy(input)
+        f = io.BytesIO()
+        torch.onnx._export(script_module, input_copy, f,
+                           opset_version=self.opset_version,
+                           example_outputs=output,
+                           do_constant_folding=do_constant_folding,
+                           keep_initializers_as_inputs=self.keep_initializers_as_inputs,
+                           dynamic_axes=dynamic_axes,
+                           input_names=input_names, output_names=output_names,
+                           fixed_batch_size=fixed_batch_size)
+
+        ort_sess = onnxruntime.InferenceSession(f.getvalue())
+        input_copy = copy.deepcopy(input)
+        ort_test_with_input(ort_sess, input_copy, output, rtol, atol)
+
+        # if addiional test inputs are provided run the onnx
+        # model with these inputs and check the outputs
+        if test_with_inputs is not None:
+            for test_input in test_with_inputs:
+                if isinstance(test_input, torch.Tensor):
+                    test_input = (test_input,)
+                test_input_copy = copy.deepcopy(test_input)
+                output = script_module(*test_input_copy)
+                if isinstance(output, torch.Tensor):
+                    output = (output,)
+                ort_test_with_input(ort_sess, test_input, output, rtol, atol)
 
 class TestONNXRuntime(unittest.TestCase):
     from torch.onnx.symbolic_helper import _export_onnx_opset_version
@@ -340,6 +368,22 @@ class TestONNXRuntime(unittest.TestCase):
 
         x = torch.randn(3, 4)
         self.run_test(ClampMaxModel(), x)
+
+    # def test_empty_branch(self):
+    #     class EmptyBranchModel(torch.jit.ScriptModule):
+    #         @torch.jit.script_method
+    #         def forward(self, input):
+    #             out = input + 1
+    #             if out.dim() > 2:
+    #                 if out.dim() > 3:
+    #                     out += 3
+    #                 else:
+    #                     pass
+    #             else:
+    #                 pass
+    #             return out
+    #     x = torch.randn(1, 2, 3, requires_grad=True)
+    #     self.run_test(EmptyBranchModel(), x)
 
     @skipIfUnsupportedMinOpsetVersion(11)
     def test_clamp_dyn(self):

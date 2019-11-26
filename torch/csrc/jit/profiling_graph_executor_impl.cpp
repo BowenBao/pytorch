@@ -72,8 +72,11 @@ ExecutionPlan ProfilingGraphExecutorImpl::getPlanFor(Stack& stack) {
   }
 
   std::shared_ptr<Graph> copy;
+  printf("get plan\n");
   if (getProfilingMode()) {
+    printf("profile mode\n");
     if (!pr_) {
+      printf("create pr\n");
       pr_ = ProfilingRecord::instrumentGraph(prepareGraph(graph, stack));
       auto copy = pr_->graph()->copy();
       LowerGradOf(*copy);
@@ -85,6 +88,7 @@ ExecutionPlan ProfilingGraphExecutorImpl::getPlanFor(Stack& stack) {
     }
 
     if (!pr_->ready()) {
+      printf("somewhat early return for getting plans.\n");
       return *profiling_plan_;
     }
     copy = pr_->graph()->copy();
@@ -94,6 +98,7 @@ ExecutionPlan ProfilingGraphExecutorImpl::getPlanFor(Stack& stack) {
   }
 
   if (!getGraphExecutorOptimize()) {
+    printf("setting optimized_plan\n");
     runRequiredPasses(copy);
     optimized_plan_ = ExecutionPlan(copy);
     return *optimized_plan_;
@@ -146,9 +151,34 @@ ExecutionPlan ProfilingGraphExecutorImpl::getPlanFor(Stack& stack) {
   GRAPH_DUMP("Optimized Graph : ", copy);
   // cache
   optimized_plan_ = ExecutionPlan(copy);
+  printf("Caching optimized plan\n");
   return *optimized_plan_;
 }
 
+static void removeProfileNodes(Block* b) {
+
+  for (auto it = b->nodes().begin(); it != b->nodes().end(); it++) {
+    if (it->kind() == prim::profile) {
+      if (it->outputs().size() == 1) {
+      it->input(0)->setType(it->output()->type());
+      it->output()->replaceAllUsesWith(it->input(0));
+      }
+      it.destroyCurrent();
+    } else {
+      for (auto ib : it->blocks()) {
+        removeProfileNodes(ib);
+      }
+    }
+  }
+
+}
+
+std::shared_ptr<Graph> ProfilingGraphExecutorImpl::_getProfiledGraph() const {
+  TORCH_INTERNAL_ASSERT(pr_, "the graph is supposed to be already profiled")
+  auto copy = pr_->profiled_graph_->copy();
+  removeProfileNodes(copy->block());
+  return copy;
+}
 
 GraphExecutorState ProfilingGraphExecutorImpl::getDebugState() {
   GraphExecutorState state;

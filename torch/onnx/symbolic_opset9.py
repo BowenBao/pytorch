@@ -1108,6 +1108,12 @@ def pow(g, self, exponent):
     return g.op("Pow", self, exponent)
 
 
+def dim(g, self):
+    '''Implement the dim functionality available for a pytorch tensor in ONNX'''
+    # ONNX does not support dim directly in this opset so we can use 2 ops to get the info
+    shape = g.op('Shape', self)
+    return g.op('Size', shape)
+
 def clamp(g, self, min, max):
     # min or max may be None that we need to dispatch to
     # Clip separately, as ONNX does not have None syntax

@@ -476,7 +476,7 @@ void GraphExecutorImplBase::run(Stack& stack) {
   C10_LOG_API_USAGE_ONCE("torch.graph_executor.run");
   logging::getLogger()->addStatValue(
       logging::runtime_counters::GRAPH_EXECUTOR_INVOCATIONS, 1.0);
-
+  printf("torch graph executor run.\n");
   ExecutionPlan plan = getPlanFor(stack);
   InterpreterState(plan.code).run(stack);
   last_executed_optimized_graph = plan.graph;
@@ -642,6 +642,11 @@ std::shared_ptr<Graph> GraphExecutor::graph() const {
 
 GraphExecutorState GraphExecutor::getDebugState() {
   return pImpl->getDebugState();
+}
+
+std::shared_ptr<Graph> GraphExecutor::getProfiledGraph() const {
+  printf("Try to get profiled graph\n");
+  return pImpl->_getProfiledGraph();
 }
 
 void runRequiredPasses(const std::shared_ptr<Graph>& g) {
