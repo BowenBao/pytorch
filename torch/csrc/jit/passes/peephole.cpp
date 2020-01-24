@@ -232,6 +232,7 @@ struct PeepholeOptimizeImpl {
       } else if (
           node->kind() == aten::Float || node->kind() == aten::Int ||
           node->kind() == prim::ImplicitTensorToNum) {
+        printf("node typs is float or something.\n");
         Node* input_node = node->input()->node();
         if (input_node->kind() == prim::NumToTensor) {
           GRAPH_UPDATE(

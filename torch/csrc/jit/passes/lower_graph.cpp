@@ -87,7 +87,10 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
              "attribute but found "
           << *e.n;
     }
+    // printf("kind is %s\n", e.n->kind().toDisplayString()); // prim::getAttr
+    printf("output type is %s\n", e.n->output()->type()->python_str().c_str());
     size_t slot_idx = e.mod->type()->getAttributeSlot(e.n->s(attr::name));
+    // printf("", e.mod->getSlot(slot_idx));
     auto iv = e.mod->getSlot(slot_idx);
     if (ClassTypePtr c = e.n->output()->type()->cast<ClassType>()) {
       if (c->is_module()) {
@@ -98,7 +101,13 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
         continue;
       }
     }
-    e.n->output()->replaceAllUsesWith(getOrAddSlot({e.mod, slot_idx}));
+
+    if (!iv.isTensor()) {
+      WithInsertPoint guard(*g->nodes().begin());
+      e.n->output()->replaceAllUsesWith(g->insertConstant(iv));
+    } else {
+      e.n->output()->replaceAllUsesWith(getOrAddSlot({e.mod, slot_idx}));
+    }
     e.n->destroy();
   }
 
@@ -114,11 +123,21 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
   return std::make_pair(std::move(g), std::move(extra_ivalues));
 }
 
-static std::vector<at::Tensor> loadTensors(const std::vector<Slot>& slots) {
+static std::vector<at::Tensor> loadTensors(const std::vector<Slot>& slots, Graph& graph) {
   std::vector<at::Tensor> result;
   result.reserve(slots.size());
   for (const Slot& slot : slots) {
-    result.emplace_back(slot.obj->getSlot(slot.offset).toTensor());
+    printf("Slot is tensor %d\n", slot.obj->getSlot(slot.offset).isTensor());
+    auto v = slot.obj->getSlot(slot.offset);
+    if (!v.isTensor()) {
+      // result.emplace_back(graph.insertConstant(v));
+      printf("calling .to<at::Tensor>\n");
+      // result.emplace_back(v.to<at::Tensor>());
+      result.emplace_back(at::tensor((int64_t)v.toBool()));
+    } else {
+      result.emplace_back(slot.obj->getSlot(slot.offset).toTensor());
+    }
+    // result.emplace_back(slot.obj->getSlot(slot.offset).toTensor());
   }
   return result;
 }
@@ -127,7 +146,7 @@ std::pair<std::shared_ptr<Graph>, std::vector<at::Tensor>> LowerGraph(
     Graph& graph,
     const ModulePtr& self) {
   auto result = lower_graph(self, graph);
-  return std::make_pair(result.first, loadTensors(result.second));
+  return std::make_pair(result.first, loadTensors(result.second, graph));
 }
 
 } // namespace jit
