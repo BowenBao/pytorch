@@ -153,6 +153,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         torch._C._jit_pass_erase_number_types(graph)
         print('pre onnx graph:', graph)
         graph = torch._C._jit_pass_onnx(graph, operator_export_type)
+        print('post onnx graph:', graph)
         torch._C._jit_pass_lint(graph)
 
         torch._C._jit_pass_onnx_scalar_type_analysis(graph)

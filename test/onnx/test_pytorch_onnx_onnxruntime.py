@@ -65,7 +65,8 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
         print(input)
         print(input_copy)
 
-        output = model(*input_copy)
+        model_ = model.copy()
+        output = model_(*input_copy)
         print('output:', output)
         if isinstance(output, torch.Tensor):
             output = (output,)
@@ -74,7 +75,8 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
         f = io.BytesIO()
         input_copy = copy.deepcopy(input)
         print('model type', type(model))
-        torch.onnx._export(model, input_copy, f,
+        model_ = model.copy()
+        torch.onnx._export(model_, input_copy, f,
                            opset_version=self.opset_version,
                            example_outputs=output,
                            do_constant_folding=do_constant_folding,
@@ -95,7 +97,8 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
                 if isinstance(test_input, torch.Tensor):
                     test_input = (test_input,)
                 test_input_copy = copy.deepcopy(test_input)
-                output = model(*test_input_copy)
+                model_ = model.copy()
+                output = model_(*test_input_copy)
                 if isinstance(output, torch.Tensor):
                     output = (output,)
                 ort_test_with_input(ort_sess, test_input, output, rtol, atol)
@@ -118,7 +121,8 @@ class TestONNXRuntime(unittest.TestCase):
                  input_names=None, output_names=None, fixed_batch_size=False):
         def _run_test(m):
             print('input:', input)
-            return run_model_test(self, m, batch_size=batch_size,
+            m_ = m.copy()
+            return run_model_test(self, m_, batch_size=batch_size,
                                   input=input, use_gpu=use_gpu, rtol=rtol, atol=atol,
                                   do_constant_folding=do_constant_folding,
                                   dynamic_axes=dynamic_axes, test_with_inputs=test_with_inputs,
@@ -126,7 +130,8 @@ class TestONNXRuntime(unittest.TestCase):
                                   fixed_batch_size=fixed_batch_size)
         print('flag is:', self.is_script_test_enabled)
         if self.is_script_test_enabled:
-            script_model = torch.jit.script(model)
+            m_ = model.copy()
+            script_model = torch.jit.script(m_)
             _run_test(script_model)
         _run_test(model)
         print('run test finish')
