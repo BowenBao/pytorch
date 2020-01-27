@@ -306,12 +306,14 @@ def _model_to_graph(model, args, verbose=False, training=False,
     if isinstance(model, torch.jit.ScriptModule):
         assert example_outputs is not None, "example_outputs must be provided when exporting a ScriptModule"
         try:
-            graph = model.forward.graph
+            # graph = model.forward.graph
 
             # run once to get profiled graph.
-            # model(*args)
+            print('pre run')
+            model(*args)
+            print('post run')
             # print(args)
-            # graph = model.forward._profiled_graph
+            graph = model.forward._profiled_graph
 
             print('jit:', graph)
 
