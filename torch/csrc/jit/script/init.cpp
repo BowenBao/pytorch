@@ -1023,6 +1023,11 @@ void initJitScriptBindings(PyObject* module) {
           })
       .def_property_readonly("graph", &Method::graph)
       .def_property_readonly(
+          "_profiled_graph",
+          [](Method& self) {
+            return self.get_executor().getProfiledGraph();
+          })
+      .def_property_readonly(
           "schema", [](Method& m) { return m.function().getSchema(); })
       .def_property_readonly("name", &Method::name)
       .def_property_readonly("code", [](Method& self) {
