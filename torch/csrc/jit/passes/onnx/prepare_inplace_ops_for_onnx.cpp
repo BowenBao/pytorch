@@ -22,6 +22,15 @@ Value* ConvertSelectToIndex(Value* index, Node* insertBefore) {
   return graph->insert(aten::unsqueeze, {idx_tensor->output(), 0});
 }
 
+Value* ConvertSelectToIndex(Value* index, Node* insertBefore) {
+  // Create index tensor based on index input of aten::select node.
+  auto graph = insertBefore->owningGraph();
+  WithInsertPoint guard(insertBefore);
+  auto idx_tensor = graph->createNumToTensor(index);
+  graph->insertNode(idx_tensor);
+  return graph->insert(aten::unsqueeze, {idx_tensor->output(), 0});
+}
+
 Value* ConvertSliceToIndex(Node* slice, Value* size, Node* insertBefore) {
   // Create index tensor based on aten::slice node.
   const int64_t int_max = std::numeric_limits<int>::max();
