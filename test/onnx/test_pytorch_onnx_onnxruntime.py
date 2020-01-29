@@ -128,51 +128,61 @@ class TestONNXRuntime(unittest.TestCase):
 
     # Export Torchvision models
 
+    @enableScriptTest()
     def test_alexnet(self):
         model = torchvision.models.alexnet(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,))
 
+    # @enableScriptTest() # jit bug: cannot run twice
     def test_densenets(self):
         model = torchvision.models.densenet121(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
+    # @enableScriptTest() # jit bug: cannot script
     def test_googlenet(self):
         model = torchvision.models.googlenet(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
+    # @enableScriptTest() # jit bug: cannot run twice
     def test_inception(self):
         model = torchvision.models.inception_v3(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
+    # @enableScriptTest()
     def test_mnasnet(self):
         model = torchvision.models.mnasnet1_0(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
+    # @enableScriptTest()
     def test_mobilenet(self):
         model = torchvision.models.mobilenet_v2(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
+    @enableScriptTest()
     def test_resnet(self):
         model = torchvision.models.resnet50(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,))
 
+    @enableScriptTest()
     def test_shufflenet(self):
         model = torchvision.models.shufflenet_v2_x1_0(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
+    @enableScriptTest()
     def test_squeezenet(self):
         model = torchvision.models.squeezenet1_1(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,))
 
+    @enableScriptTest()
     def test_vgg(self):
         model = torchvision.models.vgg19(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
@@ -181,27 +191,32 @@ class TestONNXRuntime(unittest.TestCase):
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
     @skipIfUnsupportedMinOpsetVersion(11)
+    @enableScriptTest()
     def test_fcn(self):
         model = torchvision.models.segmentation.segmentation.fcn_resnet101(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
     @skipIfUnsupportedMinOpsetVersion(11)
+    @enableScriptTest()
     def test_deeplab(self):
         model = torchvision.models.segmentation.segmentation.deeplabv3_resnet101(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
+    @enableScriptTest()
     def test_r3d_18_video(self):
         model = torchvision.models.video.r3d_18(pretrained=True)
         x = torch.randn(1, 3, 4, 112, 112, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
+    @enableScriptTest()
     def test_mc3_18_video(self):
         model = torchvision.models.video.mc3_18(pretrained=True)
         x = torch.randn(1, 3, 4, 112, 112, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
+    @enableScriptTest()
     def test_r2plus1d_18_video(self):
         model = torchvision.models.video.r2plus1d_18(pretrained=True)
         x = torch.randn(1, 3, 4, 112, 112, requires_grad=True)
@@ -940,6 +955,16 @@ class TestONNXRuntime(unittest.TestCase):
 
         update = torch.randn(1, 2)
         self.run_test(CopyModel3(), (x, update))
+
+        class CopyModel4(torch.nn.Module):
+            def forward(self, x, ind, data):
+                x[ind] = data
+                return x
+        
+        x = torch.randn(3, 4)
+        ind = torch.tensor(2)
+        data = torch.randn(4)
+        self.run_test(CopyModel4(), (x, ind, data))
 
     @skipIfUnsupportedMinOpsetVersion(11)
     def test_copy_ellipsis(self):
