@@ -481,6 +481,8 @@ void GraphExecutorImplBase::run(Stack& stack) {
       getPlanFor(stack, GraphExecutor::getDefaultNumBailOuts());
   InterpreterState(plan.code).run(stack);
   last_executed_optimized_graph = plan.graph;
+  // This is not very clear, the plan might be either profile_plan or optimize_plan.
+  // printf("After run, the graph is %s\n", plan.graph->toString().c_str());
 }
 
 // a Graph can be created via tracing, or via a language-based frontend

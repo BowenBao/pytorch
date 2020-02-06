@@ -435,6 +435,12 @@ def unbind(g, self, dim=0):
     return g.op("aten::unbind", self, axis_i=dim)
 
 
+@parse_args('is', 'is')
+def list_with_default(g, sizes, defaults):
+    return g.op("Constant",
+                value_t=torch.LongTensor([v if v is not None else d for v, d in zip(sizes, defaults[-len(sizes):])]))
+
+
 @parse_args('v', 'i', 'v')
 def select(g, self, dim, index):
     index = sym_help._maybe_get_scalar(index)
