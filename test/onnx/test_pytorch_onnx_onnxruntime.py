@@ -63,14 +63,16 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
         # In-place operators will update input tensor data as well.
         # Thus inputs are replicated before every forward call.
         input_copy = copy.deepcopy(input)
-        output = model(*input_copy)
+        model_copy = model.copy() if isinstance(model, torch.jit.ScriptModule) else model
+        output = model_copy(*input_copy)
         if isinstance(output, torch.Tensor):
             output = (output,)
 
         # export the model to ONNX
         f = io.BytesIO()
         input_copy = copy.deepcopy(input)
-        torch.onnx._export(model, input_copy, f,
+        model_copy = model.copy() if isinstance(model, torch.jit.ScriptModule) else model
+        torch.onnx._export(model_copy, input_copy, f,
                            opset_version=self.opset_version,
                            example_outputs=output,
                            do_constant_folding=do_constant_folding,
@@ -91,7 +93,8 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
                 if isinstance(test_input, torch.Tensor):
                     test_input = (test_input,)
                 test_input_copy = copy.deepcopy(test_input)
-                output = model(*test_input_copy)
+                model_copy = model.copy() if isinstance(model, torch.jit.ScriptModule) else model
+                output = model_copy(*test_input_copy)
                 if isinstance(output, torch.Tensor):
                     output = (output,)
                 ort_test_with_input(ort_sess, test_input, output, rtol, atol)
@@ -134,7 +137,7 @@ class TestONNXRuntime(unittest.TestCase):
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,))
 
-    # @enableScriptTest() # jit bug: cannot run twice
+    @enableScriptTest() # jit bug: cannot run twice [resolved] SetAttr failure.
     def test_densenets(self):
         model = torchvision.models.densenet121(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
@@ -146,7 +149,7 @@ class TestONNXRuntime(unittest.TestCase):
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
-    # @enableScriptTest() # jit bug: cannot run twice
+    @enableScriptTest() # jit bug: cannot run twice [resovled] SetAttr failure.
     def test_inception(self):
         model = torchvision.models.inception_v3(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)

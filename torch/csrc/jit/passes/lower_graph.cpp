@@ -87,7 +87,10 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
              "attribute but found "
           << *e.n;
     }
+    // printf("kind is %s\n", e.n->kind().toDisplayString()); // prim::getAttr
+    printf("output type is %s\n", e.n->output()->type()->python_str().c_str());
     size_t slot_idx = e.mod->type()->getAttributeSlot(e.n->s(attr::name));
+    // printf("", e.mod->getSlot(slot_idx));
     auto iv = e.mod->getSlot(slot_idx);
     if (ClassTypePtr c = e.n->output()->type()->cast<ClassType>()) {
       if (c->is_module()) {
@@ -98,7 +101,13 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
         continue;
       }
     }
-    e.n->output()->replaceAllUsesWith(getOrAddSlot({e.mod, slot_idx}));
+
+    if (!iv.isTensor()) {
+      WithInsertPoint guard(*g->nodes().begin());
+      e.n->output()->replaceAllUsesWith(g->insertConstant(iv));
+    } else {
+      e.n->output()->replaceAllUsesWith(getOrAddSlot({e.mod, slot_idx}));
+    }
     e.n->destroy();
   }
 

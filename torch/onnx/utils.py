@@ -93,6 +93,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
 
     # Remove fork/wait nodes
     torch._C._jit_pass_inline_fork_wait(graph)
+    print('before dce: ', graph)
     torch._C._jit_pass_dce(graph)
     torch._C._jit_pass_lint(graph)
 
@@ -111,12 +112,15 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
 
     torch._C._jit_pass_canonicalize_ops(graph)
     torch._C._jit_pass_lint(graph)
+    print('before', graph)
 
     torch._C._jit_pass_peephole(graph, True)
     torch._C._jit_pass_lint(graph)
+    print('after peephole', graph)
 
     if operator_export_type != OperatorExportTypes.RAW:
         torch._C._jit_pass_onnx_prepare_inplace_ops_for_onnx(graph)
+        print('after prepare inplace ops', graph)
 
         # onnx does not support tuples, so try to remove them
         torch._C._jit_pass_lower_all_tuples(graph)
@@ -152,7 +156,9 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
 
         torch._C._jit_pass_fixup_jit_exceptions(graph)
 
+        print('pre onnx graph:', graph)
         graph = torch._C._jit_pass_onnx(graph, operator_export_type)
+        print('post onnx graph:', graph)
         torch._C._jit_pass_lint(graph)
 
         torch._C._jit_pass_onnx_scalar_type_analysis(graph)
@@ -302,12 +308,18 @@ def _model_to_graph(model, args, verbose=False, training=False,
         example_outputs = [example_outputs]
 
     torch_out = None
-
+    print('type is', type(model))
     if isinstance(model, torch.jit.ScriptModule):
         assert example_outputs is not None, "example_outputs must be provided when exporting a ScriptModule"
         try:
+            print('run model once for warm up')
             model(*args)
-            method_graph, params = torch._C._jit_pass_lower_graph(model.forward._profiled_graph, model._c)
+            print('run model complete')
+            # debug code
+            print('get profiled graph')
+            graph = model.forward._profiled_graph
+            print('got profiled graph')
+            method_graph, params = torch._C._jit_pass_lower_graph(graph, model._c)
             in_vars, in_desc = torch.jit._flatten(tuple(args) + tuple(params))
             graph = _propagate_and_assign_input_shapes(
                 method_graph, tuple(in_vars), False, propagate)
@@ -464,6 +476,7 @@ def _export(model, args, f, export_params=True, verbose=False, training=False,
                                                          opset_version)
         val_add_node_names = _decide_add_node_names(add_node_names, operator_export_type)
         val_do_constant_folding = _decide_constant_folding(do_constant_folding, operator_export_type)
+        print('call model to graph')
         graph, params_dict, torch_out = _model_to_graph(model, args, verbose,
                                                         training, input_names,
                                                         output_names, operator_export_type,
