@@ -38,7 +38,8 @@ def ort_test_with_input(ort_sess, input, output, rtol, atol):
 
     ort_inputs = dict((ort_sess.get_inputs()[i].name, input) for i, input in enumerate(inputs))
     ort_outs = ort_sess.run(None, ort_inputs)
-
+    print('ort_outs:', ort_outs)
+    print('py_outs:', outputs)
     # compare onnxruntime and PyTorch results
     assert len(outputs) == len(ort_outs), "number of outputs differ"
 
@@ -67,7 +68,7 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
         output = model_copy(*input_copy)
         if isinstance(output, torch.Tensor):
             output = (output,)
-
+        print('test output:', output)
         # export the model to ONNX
         f = io.BytesIO()
         input_copy = copy.deepcopy(input)
@@ -84,6 +85,8 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
         # compute onnxruntime output prediction
         ort_sess = onnxruntime.InferenceSession(f.getvalue())
         input_copy = copy.deepcopy(input)
+        # a_output = model_copy(*input_copy)
+        # print('again output:', a_output)
         ort_test_with_input(ort_sess, input_copy, output, rtol, atol)
 
         # if additional test inputs are provided run the onnx
@@ -137,7 +140,7 @@ class TestONNXRuntime(unittest.TestCase):
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,))
 
-    @enableScriptTest() # jit bug: cannot run twice [resolved] SetAttr failure.
+    @enableScriptTest() # jit bug: cannot run twice [resolved] SetAttr failure. [resolved] opset9 append (workedaround) opset 11 exception in if.
     def test_densenets(self):
         model = torchvision.models.densenet121(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
@@ -149,7 +152,7 @@ class TestONNXRuntime(unittest.TestCase):
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,), rtol=1e-3, atol=1e-5)
 
-    @enableScriptTest() # jit bug: cannot run twice [resovled] SetAttr failure.
+    @enableScriptTest() # jit bug: cannot run twice [resovled] SetAttr failure. [resolved] Cannot support jit, returns custom typed output.
     def test_inception(self):
         model = torchvision.models.inception_v3(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
@@ -173,7 +176,7 @@ class TestONNXRuntime(unittest.TestCase):
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
         self.run_test(model, (x,))
 
-    @enableScriptTest()
+    @enableScriptTest() # add floordiv support.
     def test_shufflenet(self):
         model = torchvision.models.shufflenet_v2_x1_0(pretrained=True)
         x = torch.randn(2, 3, 224, 224, requires_grad=True)
@@ -1351,6 +1354,7 @@ class TestONNXRuntime(unittest.TestCase):
         x = torch.randn(20, 5, 10, 10)
         self.run_test(model, x)
 
+    @enableScriptTest()
     def test_batchnorm1d(self):
         x = torch.randn(10, 10)
         model = torch.nn.BatchNorm1d(10, affine=True)
@@ -1386,6 +1390,22 @@ class TestONNXRuntime(unittest.TestCase):
         x = torch.randn(10, 3, 128, 128, 128)
         model = torch.nn.BatchNorm3d(3, affine=False)
         self.run_test(model, x)
+
+    def test_batchnorm_track_running_stats(self):
+        class BNModel(torch.nn.Module):
+            def __init__(self):
+                super(BNModel, self).__init__()
+                self.bn = torch.nn.BatchNorm1d(10)
+
+            def forward(self, input1, input2):
+                out1 = self.bn(input1)
+                out2 = self.bn(input2)
+                return out1, out2
+
+        x = torch.randn(10, 10)
+        y = torch.randn(10, 10)
+        model = BNModel()
+        self.run_test(model, (x, y))
 
     @skipIfUnsupportedMinOpsetVersion(9)
     def test_scatter(self):

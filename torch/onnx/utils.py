@@ -318,7 +318,7 @@ def _model_to_graph(model, args, verbose=False, training=False,
             # debug code
             print('get profiled graph')
             graph = model.forward._profiled_graph
-            print('got profiled graph')
+            print('got profiled graph: ', graph)
             method_graph, params = torch._C._jit_pass_lower_graph(graph, model._c)
             in_vars, in_desc = torch.jit._flatten(tuple(args) + tuple(params))
             graph = _propagate_and_assign_input_shapes(
@@ -353,6 +353,7 @@ def _model_to_graph(model, args, verbose=False, training=False,
                             fixed_batch_size=fixed_batch_size, params_dict=params_dict)
 
     if isinstance(model, torch.jit.ScriptModule) or isinstance(model, torch.jit.ScriptFunction):
+        print('example outputs:', example_outputs)
         out_vars, _ = torch.jit._flatten(tuple(example_outputs))
         graph = _assign_output_shapes(graph, out_vars)
 

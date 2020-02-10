@@ -58,6 +58,11 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
   auto self_value = g->inputs().at(self_offset);
 
   for (Use use : self_value->uses()) {
+    printf("Emplacing module %s node %s (%zu)outputs and offset %zu\n",
+      self->name().c_str(),
+      use.user->output(0)->type()->python_str().c_str(),
+      use.user->outputs().size(),
+      use.offset);
     to_scan.emplace_back(ToScan{self, use.user, use.offset});
   }
   while (to_scan.size() > 0) {
@@ -81,6 +86,10 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
       throw script::ErrorReport(e.n->sourceRange())
           << "Couldn't export Python method.";
     }
+    if (e.n->kind() == prim::SetAttr) {
+      e.n->destroy();
+      continue;
+    }
     if (e.n->kind() != prim::GetAttr) {
       throw script::ErrorReport(e.n->sourceRange())
           << "temporary: the only valid use of a module is looking up an "
@@ -88,13 +97,22 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
           << *e.n;
     }
     // printf("kind is %s\n", e.n->kind().toDisplayString()); // prim::getAttr
-    printf("output type is %s\n", e.n->output()->type()->python_str().c_str());
     size_t slot_idx = e.mod->type()->getAttributeSlot(e.n->s(attr::name));
+    printf("output type is %s (%zu)outputs with attr name %s slot_idx: %zu of module %s\n",
+      e.n->output(0)->type()->python_str().c_str(),
+      e.n->outputs().size(),
+      e.n->s(attr::name).c_str(),
+      slot_idx,
+      e.mod->name().c_str());
     // printf("", e.mod->getSlot(slot_idx));
     auto iv = e.mod->getSlot(slot_idx);
     if (ClassTypePtr c = e.n->output()->type()->cast<ClassType>()) {
       if (c->is_module()) {
         for (Use use : e.n->output()->uses()) {
+          printf("Emplacing module %s node %s and offset %zu\n",
+            iv.toObject()->name().c_str(),
+            use.user->kind().toDisplayString(),
+            use.offset);
           to_scan.emplace_back(ToScan{iv.toObject(), use.user, use.offset});
         }
         to_clean.emplace_back(e.n);
