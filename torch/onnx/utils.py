@@ -180,6 +180,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     torch._C._jit_pass_lint(graph)
     graph = torch._C._jit_pass_canonicalize(graph)
     torch._C._jit_pass_lint(graph)
+    print('final graph:', graph)
     return graph
 
 
@@ -313,13 +314,17 @@ def _model_to_graph(model, args, verbose=False, training=False,
         assert example_outputs is not None, "example_outputs must be provided when exporting a ScriptModule"
         try:
             print('run model once for warm up')
+            # backup model to preserve original attribute values.
+            model_copy = model.copy()
+            # run model once to get profiled graph.
             model(*args)
             print('run model complete')
             # debug code
             print('get profiled graph')
             graph = model.forward._profiled_graph
             print('got profiled graph: ', graph)
-            method_graph, params = torch._C._jit_pass_lower_graph(graph, model._c)
+            method_graph, params = torch._C._jit_pass_lower_graph(graph, model_copy._c)
+            print('after lower graph: ', method_graph, params)
             in_vars, in_desc = torch.jit._flatten(tuple(args) + tuple(params))
             graph = _propagate_and_assign_input_shapes(
                 method_graph, tuple(in_vars), False, propagate)

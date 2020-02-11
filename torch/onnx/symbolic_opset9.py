@@ -2219,3 +2219,8 @@ def dim(g, self):
 
 def __getitem_(g, self, i):
     return select(g, self, g.op("Constant", value_t=torch.tensor([0])), i)
+
+def append(g, self, tensor):
+    tensors = sym_help._unpack_list(self)
+    tensors.append(tensor)
+    return g.op("prim::ListConstruct", *tensors)

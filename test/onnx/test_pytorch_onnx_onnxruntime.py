@@ -39,7 +39,6 @@ def ort_test_with_input(ort_sess, input, output, rtol, atol):
     ort_inputs = dict((ort_sess.get_inputs()[i].name, input) for i, input in enumerate(inputs))
     ort_outs = ort_sess.run(None, ort_inputs)
     print('ort_outs:', ort_outs)
-    print('py_outs:', outputs)
     # compare onnxruntime and PyTorch results
     assert len(outputs) == len(ort_outs), "number of outputs differ"
 
@@ -68,12 +67,11 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
         output = model_copy(*input_copy)
         if isinstance(output, torch.Tensor):
             output = (output,)
-        print('test output:', output)
         # export the model to ONNX
         f = io.BytesIO()
         input_copy = copy.deepcopy(input)
         model_copy = model.copy() if isinstance(model, torch.jit.ScriptModule) else model
-        torch.onnx._export(model_copy, input_copy, f,
+        torch.onnx._export(model_copy, input_copy, 'model.onnx',
                            opset_version=self.opset_version,
                            example_outputs=output,
                            do_constant_folding=do_constant_folding,
@@ -83,7 +81,7 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
                            fixed_batch_size=fixed_batch_size)
 
         # compute onnxruntime output prediction
-        ort_sess = onnxruntime.InferenceSession(f.getvalue())
+        ort_sess = onnxruntime.InferenceSession('model.onnx')#f.getvalue())
         input_copy = copy.deepcopy(input)
         # a_output = model_copy(*input_copy)
         # print('again output:', a_output)
@@ -130,7 +128,7 @@ class TestONNXRuntime(unittest.TestCase):
         if self.is_script_test_enabled:
             script_model = torch.jit.script(model_)
             _run_test(script_model)
-        _run_test(model_)
+        # _run_test(model_)
 
     # Export Torchvision models
 
@@ -1353,6 +1351,22 @@ class TestONNXRuntime(unittest.TestCase):
         model = torch.nn.LayerNorm([10, 10])
         x = torch.randn(20, 5, 10, 10)
         self.run_test(model, x)
+
+    @enableScriptTest()
+    def test_set_attr(self):
+        class AttrModel(torch.nn.Module):
+            def __init__(self):
+                super(AttrModel, self).__init__()
+                self.a = torch.ones(2, 3, 4)
+
+            def forward(self, x):
+                b = self.a
+                self.a = x
+                self.a = self.a + 1
+                return b, self.a
+
+        x = torch.randn(2, 3, 4)
+        self.run_test(AttrModel(), (x,))
 
     @enableScriptTest()
     def test_batchnorm1d(self):
