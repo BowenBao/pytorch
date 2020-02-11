@@ -2222,8 +2222,15 @@ def dim(g, self):
 def __getitem_(g, self, i):
     return select(g, self, g.op("Constant", value_t=torch.tensor([0])), i)
 
+
 def take(g, self, index):
     self_flattened = g.op('Reshape', self, g.op("Constant", value_t=torch.tensor([-1], dtype=torch.int64)))
     out = index_select(g, self_flattened, 0, index)
     out = reshape_as(g, out, index)
     return out
+
+
+def append(g, self, tensor):
+    tensors = sym_help._unpack_list(self)
+    tensors.append(tensor)
+    return g.op("prim::ListConstruct", *tensors)
