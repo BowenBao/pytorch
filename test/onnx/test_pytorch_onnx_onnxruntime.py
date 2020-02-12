@@ -63,14 +63,14 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
         # In-place operators will update input tensor data as well.
         # Thus inputs are replicated before every forward call.
         input_copy = copy.deepcopy(input)
-        model_copy = model.copy() if isinstance(model, torch.jit.ScriptModule) else model
+        model_copy = model.copy() if isinstance(model, torch.jit.ScriptModule) else copy.deepcopy(model)
         output = model_copy(*input_copy)
         if isinstance(output, torch.Tensor):
             output = (output,)
         # export the model to ONNX
         f = io.BytesIO()
         input_copy = copy.deepcopy(input)
-        model_copy = model.copy() if isinstance(model, torch.jit.ScriptModule) else model
+        model_copy = model.copy() if isinstance(model, torch.jit.ScriptModule) else copy.deepcopy(model)
         torch.onnx._export(model_copy, input_copy, 'model.onnx',
                            opset_version=self.opset_version,
                            example_outputs=output,
@@ -94,7 +94,7 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
                 if isinstance(test_input, torch.Tensor):
                     test_input = (test_input,)
                 test_input_copy = copy.deepcopy(test_input)
-                model_copy = model.copy() if isinstance(model, torch.jit.ScriptModule) else model
+                model_copy = model.copy() if isinstance(model, torch.jit.ScriptModule) else copy.deepcopy(model)
                 output = model_copy(*test_input_copy)
                 if isinstance(output, torch.Tensor):
                     output = (output,)
@@ -116,7 +116,7 @@ class TestONNXRuntime(unittest.TestCase):
     def run_test(self, model, input, rtol=1e-3, atol=1e-7, do_constant_folding=True,
                  batch_size=2, use_gpu=True, dynamic_axes=None, test_with_inputs=None,
                  input_names=None, output_names=None, fixed_batch_size=False):
-        model_ = model.copy() if hasattr(model, 'copy') else model
+        model_ = model.copy() if hasattr(model, 'copy') else copy.deepcopy(model)
 
         def _run_test(m):
             return run_model_test(self, m, batch_size=batch_size,
@@ -128,7 +128,8 @@ class TestONNXRuntime(unittest.TestCase):
         if self.is_script_test_enabled:
             script_model = torch.jit.script(model_)
             _run_test(script_model)
-        # _run_test(model_)
+        else:
+            _run_test(model_)
 
     # Export Torchvision models
 
@@ -1360,7 +1361,7 @@ class TestONNXRuntime(unittest.TestCase):
                 self.a = torch.ones(2, 3, 4)
 
             def forward(self, x):
-                b = self.a
+                b = self.a + 2
                 self.a = x
                 self.a = self.a + 1
                 return b, self.a
@@ -1405,6 +1406,7 @@ class TestONNXRuntime(unittest.TestCase):
         model = torch.nn.BatchNorm3d(3, affine=False)
         self.run_test(model, x)
 
+    @enableScriptTest()
     def test_batchnorm_track_running_stats(self):
         class BNModel(torch.nn.Module):
             def __init__(self):
