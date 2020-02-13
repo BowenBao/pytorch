@@ -15,13 +15,8 @@ struct Slot {
 };
 
 struct SlotValue {
-  enum SlotValueType {
-    Initializer,
-    Value,
-  };
-  SlotValueType type;
   size_t offset;
-  torch::jit::Value* value;
+  torch::jit::Value* value = nullptr;
 };
 
 // remove the first module argument, replacing any access of its
@@ -58,13 +53,11 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
     auto it = slot_to_value.find(slot);
     if (it != slot_to_value.end()) {
       auto slot_value = it->second;
-      switch (slot_value.type) {
-        case SlotValue::SlotValueType::Initializer: {
-          size_t ivalues_start = g->inputs().size() - extra_ivalues.size();
-          return g->inputs().at(ivalues_start + slot_value.offset);
-        }
-        case SlotValue::SlotValueType::Value:
-          return slot_value.value;
+      if (nullptr == slot_value.value) {
+        size_t ivalues_start = g->inputs().size() - extra_ivalues.size();
+        return g->inputs().at(ivalues_start + slot_value.offset);
+      } else {
+        return slot_value.value;
       }
     }
 
@@ -72,11 +65,11 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
     if (!iv.isTensor()) {
       WithInsertPoint guard(*g->nodes().begin());
       auto v = g->insertConstant(iv);
-      slot_to_value[slot] = {SlotValue::SlotValueType::Value, 0, v};
+      slot_to_value[slot] = {0, v};
       return v;
     } else {
       extra_ivalues.emplace_back(slot);
-      slot_to_value[slot] = {SlotValue::SlotValueType::Initializer, extra_ivalues.size() - 1, nullptr};
+      slot_to_value[slot] = {extra_ivalues.size() - 1, nullptr};
       return g->addInput()->setType(slot.obj->getSlot(slot.offset).type());
     }
   };
@@ -98,6 +91,7 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
   while (to_scan.size() > 0) {
     auto e = to_scan.back();
     to_scan.pop_back();
+    printf("To scan node kind %s\n", e.n->kind().toDisplayString());
 
     // when we lambda lift forks, first-class modules may be passed across
     // forks. This code recursively lowers the module in the fork call.
@@ -117,9 +111,29 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
           << "Couldn't export Python method.";
     }
     if (e.n->kind() == prim::SetAttr) {
+      printf("Enter SetAttr\n");
       size_t slot_idx = e.mod->type()->getAttributeSlot(e.n->s(attr::name));
+      printf("SetAttr %s on slot %zu\n", e.n->s(attr::name).c_str(), slot_idx);
       AT_ASSERT(e.n->inputs().size() >= 2);
-      slot_to_value[{e.mod, slot_idx}] = {SlotValue::SlotValueType::Value, 0, e.n->input(1)};
+      auto v = e.n->input(1);
+      Slot slot = {e.mod, slot_idx};
+
+      auto owning_block = e.n->owningBlock();
+      auto owning_node = owning_block->owningNode();
+      if (owning_node && owning_node->kind() == prim::If) {
+        std::cerr << "Warning: SetAttr within prim::If is currently not supported. "
+                  << "The exported graph may be different." << std::endl;
+        e.n->destroy();
+        continue;
+      }
+      printf("now graph looks like: %s\n", g->toString().c_str());
+      if (slot_to_value.find(slot) != slot_to_value.end()) {
+        printf("Set attr update slot\n");
+        slot_to_value[slot].value = v;
+      } else {
+        printf("Set attr new slot\n");
+        slot_to_value[slot] = {0, v};
+      }
       e.n->destroy();
       continue;
     }
@@ -131,6 +145,7 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
     }
     // printf("kind is %s\n", e.n->kind().toDisplayString()); // prim::getAttr
     size_t slot_idx = e.mod->type()->getAttributeSlot(e.n->s(attr::name));
+    printf("GetAttr %s on slot %zu\n", e.n->s(attr::name).c_str(), slot_idx);
     // printf("output type is %s (%zu)outputs with attr name %s slot_idx: %zu of module %s\n",
     //   e.n->output(0)->type()->python_str().c_str(),
     //   e.n->outputs().size(),

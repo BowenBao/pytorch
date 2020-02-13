@@ -135,6 +135,10 @@ def floor_divide(g, self, other):
     return out
 
 
+def floordiv(g, self, other):
+    return floor_divide(g, self, other)
+
+
 def reciprocal(g, self):
     return g.op("Div", torch.ones(1), self)
 
@@ -401,6 +405,7 @@ def prim_ConstantSplit(g, self, split_size, dim):
 # TODO: Once we have proper scoping, stop reimplementing chunk, delete this
 # method, and use the desugared version
 def prim_ConstantChunk(g, self, chunks, dim):
+    # if self.type().sizes() is None:
     split_size = (self.type().sizes()[dim] + chunks - 1) // chunks
     return prim_ConstantSplit(g, self, split_size, dim)
 

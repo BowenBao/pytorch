@@ -11,6 +11,7 @@ import torch.jit
 import torch.autograd
 import torch.serialization
 import re
+import copy
 from torch._six import container_abcs
 import contextlib
 import numbers
