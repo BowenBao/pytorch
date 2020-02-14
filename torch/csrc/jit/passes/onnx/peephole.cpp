@@ -592,6 +592,33 @@ static void eraseListConstruct(Block* block, int opset_version) {
   }
 }
 
+static void fuseConstantListUnpack(Block* b) {
+  for (auto it = b->nodes().begin(), end = b->nodes().end(); it != end; ++it) {
+    for (auto* child_block : it->blocks()) {
+      fuseConstantListUnpack(child_block);
+    }
+    if (it->kind() == prim::ListUnpack &&
+        it->input()->node()->kind() == onnx::Constant) {
+      auto val = it->input()->node()->t(attr::value);
+
+      TORCH_CHECK(val.dim() == 1);
+      TORCH_CHECK(val.size(0) == it->outputs().size());
+      AT_DISPATCH_ALL_TYPES(val.scalar_type(), "fuseConstantListUnpack", [&] {
+        scalar_t* vals = val.data_ptr<scalar_t>();
+        for (size_t i = 0; i < val.size(0); ++i) {
+          auto unpacked_const = b->owningGraph()->create(onnx::Constant, 1);
+          unpacked_const->insertBefore(*it);
+          unpacked_const->t_(
+            attr::value,
+            at::scalar_to_tensor(vals[i])
+          );
+          it->output(i)->replaceAllUsesWith(unpacked_const->output());
+        }
+      });
+    }
+  }
+}
+
 static void fuseSplitListUnpack(Block* b) {
   for (auto it = b->nodes().begin(), end = b->nodes().end(); it != end; ++it) {
     for (auto* child_block : it->blocks()) {
@@ -814,6 +841,7 @@ void PeepholeOptimizeONNX(std::shared_ptr<Graph>& graph, int opset_version, bool
   speculateOps(graph->block());
   fuseListConstructListUnpack(graph->block());
   fuseSplitListUnpack(graph->block());
+  fuseConstantListUnpack(graph->block());
   convertUnbindToSplit(graph->block(), opset_version);
   convertSplitToDynamic(graph->block(), opset_version);
   eraseListConstruct(graph->block(), opset_version);

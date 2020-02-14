@@ -23,6 +23,16 @@ void FixupONNXIfs(Block* block) {
           id_node->output()->copyMetadata(output);
           block->return_node()->replaceInputWith(output, id_node->output());
         }
+
+        for (size_t i = 0; i < block->outputs().size(); ++i) {
+          auto block_out = block->outputs()[i];
+          auto node_out = if_node->outputs()[i];
+
+          if (!block_out->type()->cast<TensorType>()->sizes().isComplete() &&
+              node_out->type()->cast<TensorType>()->sizes().isComplete()) {
+            block_out->copyMetadata(node_out);
+          }
+        }
       }
     }
     else {

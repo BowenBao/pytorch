@@ -405,7 +405,8 @@ def prim_ConstantSplit(g, self, split_size, dim):
 # TODO: Once we have proper scoping, stop reimplementing chunk, delete this
 # method, and use the desugared version
 def prim_ConstantChunk(g, self, chunks, dim):
-    # if self.type().sizes() is None:
+    if self.type().sizes() is None:
+        return g.op("Split", self, axis_i=dim, outputs=chunks)
     split_size = (self.type().sizes()[dim] + chunks - 1) // chunks
     return prim_ConstantSplit(g, self, split_size, dim)
 
