@@ -523,36 +523,32 @@ static void replaceInputWithList(Node* node, size_t i, ArrayRef<Value*> to) {
 static void eraseListConstruct(Block* block, int opset_version) {
   // TODO: Fix this pass/maybe get rid of this part.
   // Tensor lists might be used for meshgrid and such ops as well.
-  for (auto it = block->nodes().begin(), end = block->nodes().end();
-       it != end;) {
-    Node* n = *it;
-    ++it;
-
+  auto eraseListConstructForNode = [&](Node *n) {
     for (auto b : n->blocks()) {
       eraseListConstruct(b, opset_version);
     }
-    std::vector<std::tuple<size_t, std::vector<Value*>>> replacements;
+    std::vector<std::tuple<size_t, std::vector<Value *>>> replacements;
 
     size_t i = 0;
-    for (auto* input : n->inputs()) {
+    for (auto *input : n->inputs()) {
       if (input->node()->kind() == prim::ListConstruct) {
-        auto* lc_node = input->node();
+        auto *lc_node = input->node();
         TypePtr elem =
             lc_node->output()->type()->cast<ListType>()->getElementType();
         if (elem->cast<IntType>()) {
           // ListConstruct Int[] output case, we need to transform to ONNX
           // Concat to ensure the output is a single tensor(dynamic) type in
           // order to be consumed as inputs
-          std::vector<Value*> unsqueezed;
-          Graph* g = block->owningGraph();
-          for (auto* input : lc_node->inputs()) {
-            Node* unsqueezed_node = g->create(onnx::Unsqueeze, 1);
+          std::vector<Value *> unsqueezed;
+          Graph *g = block->owningGraph();
+          for (auto *input : lc_node->inputs()) {
+            Node *unsqueezed_node = g->create(onnx::Unsqueeze, 1);
             unsqueezed_node->insertBefore(lc_node);
             unsqueezed_node->addInput(input);
             unsqueezed_node->is_(attr::axes, {0});
             unsqueezed.emplace_back(unsqueezed_node->output());
           }
-          Node* concat_node = g->create(onnx::Concat, 1);
+          Node *concat_node = g->create(onnx::Concat, 1);
           concat_node->i_(attr::axis, 0);
           for (auto v : unsqueezed) {
             concat_node->addInput(v);
@@ -562,7 +558,7 @@ static void eraseListConstruct(Block* block, int opset_version) {
           // make concat node output as new input, then ListConstruct should
           // become dead
           replacements.emplace_back(
-              i, std::vector<Value*>({concat_node->output()}));
+              i, std::vector<Value *>({concat_node->output()}));
 
         } else {
           if (opset_version < OPSET_VERSION_11) {
@@ -570,12 +566,14 @@ static void eraseListConstruct(Block* block, int opset_version) {
             // already handled in those symbolics, and should become dead
             // afterwards.
             replacements.emplace_back(
-                i,
-                std::vector<Value*>(
-                    lc_node->inputs().begin(), lc_node->inputs().end()));
+                i, std::vector<Value *>(lc_node->inputs().begin(),
+                                        lc_node->inputs().end()));
           } else {
-            c10::Symbol seq_node_kind = lc_node->inputs().size() > 0 ? onnx::SequenceConstruct : onnx::SequenceEmpty;
-            Node* seq_node = block->owningGraph()->create(seq_node_kind, {lc_node->inputs()}, 1);
+            c10::Symbol seq_node_kind = lc_node->inputs().size() > 0
+                                            ? onnx::SequenceConstruct
+                                            : onnx::SequenceEmpty;
+            Node *seq_node = block->owningGraph()->create(
+                seq_node_kind, {lc_node->inputs()}, 1);
             seq_node->insertBefore(lc_node);
             seq_node->output()->copyMetadata(lc_node->output());
             lc_node->replaceAllUsesWith(seq_node);
@@ -589,7 +587,16 @@ static void eraseListConstruct(Block* block, int opset_version) {
          ++ritr) {
       replaceInputWithList(n, std::get<0>(*ritr), std::get<1>(*ritr));
     }
+  };
+
+  for (auto it = block->nodes().begin(), end = block->nodes().end();
+       it != end;) {
+    Node* n = *it;
+    ++it;
+    eraseListConstructForNode(n);
   }
+
+  eraseListConstructForNode(block->return_node());
 }
 
 static void fuseConstantListUnpack(Block* b) {

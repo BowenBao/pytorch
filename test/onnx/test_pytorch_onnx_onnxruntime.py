@@ -38,7 +38,7 @@ def ort_test_with_input(ort_sess, input, output, rtol, atol):
 
     ort_inputs = dict((ort_sess.get_inputs()[i].name, input) for i, input in enumerate(inputs))
     ort_outs = ort_sess.run(None, ort_inputs)
-    print('ort_outs:', ort_outs)
+    # print('ort_outs:', ort_outs)
     # compare onnxruntime and PyTorch results
     assert len(outputs) == len(ort_outs), "number of outputs differ"
 
@@ -125,11 +125,17 @@ class TestONNXRuntime(unittest.TestCase):
                                   dynamic_axes=dynamic_axes, test_with_inputs=test_with_inputs,
                                   input_names=input_names, output_names=output_names,
                                   fixed_batch_size=fixed_batch_size)
-        if self.is_script_test_enabled:
-            script_model = torch.jit.script(model_)
-            _run_test(script_model)
-        else:
-            _run_test(model_)
+        # if self.is_script_test_enabled:
+        #     script_model = torch.jit.script(model_)
+        #     _run_test(script_model)
+        # else:
+        #     _run_test(model_)
+        """
+        debugging: run both script and trace test.
+        """
+        script_model = torch.jit.script(model_)
+        _run_test(model_)
+        _run_test(script_model)
 
     # Export Torchvision models
 

@@ -145,8 +145,8 @@ ExecutionPlan ProfilingGraphExecutorImpl::getPlanFor(
   GRAPH_DEBUG("Running ProfilingGraphExecutorImpl ", this);
 
   if (optimized_plan_) {
-    printf("ProfilingGraphExecutorImpl::exist optimized_plan %s\n",
-      optimized_plan_->graph->toString().c_str());
+    // printf("ProfilingGraphExecutorImpl::exist optimized_plan %s\n",
+      // optimized_plan_->graph->toString().c_str());
     return *optimized_plan_;
   }
 
@@ -156,15 +156,15 @@ ExecutionPlan ProfilingGraphExecutorImpl::getPlanFor(
     runProfilingInsensitiveOptimizations(copy);
     GRAPH_DUMP("Optimized SimpleExecutor Graph : ", copy);
     optimized_plan_ = ExecutionPlan(copy);
-    printf("ProfilingGraphExecutorImpl::created optimized_plan %s\n",
-      optimized_plan_->graph->toString().c_str());
+    // printf("ProfilingGraphExecutorImpl::created optimized_plan %s\n",
+      // optimized_plan_->graph->toString().c_str());
     return *optimized_plan_;
   }
 
   // if a profiling graph hasn't been created yet
   if (!pr_) {
-    printf("creating a profiling graph, this might be some inner decompose graph: %s\n",
-      graph->toString().c_str());
+    // printf("creating a profiling graph, this might be some inner decompose graph: %s\n",
+      // graph->toString().c_str());
     auto copy = graph->copy();
     runProfilingInsensitiveOptimizations(copy);
     pr_ = ProfilingRecord::instrumentGraph(copy);
@@ -176,8 +176,8 @@ ExecutionPlan ProfilingGraphExecutorImpl::getPlanFor(
 
   // profile until a graph is ready
   if (!pr_->ready()) {
-    printf("ProfilingGraphExecutorImpl::profile_graph is not ready %s\n",
-      profiling_plan_->graph->toString().c_str());
+    // printf("ProfilingGraphExecutorImpl::profile_graph is not ready %s\n",
+      // profiling_plan_->graph->toString().c_str());
     return *profiling_plan_;
   }
 
@@ -185,8 +185,8 @@ ExecutionPlan ProfilingGraphExecutorImpl::getPlanFor(
   runProfilingOptimizations(copy);
   // cache
   optimized_plan_ = ExecutionPlan(copy, remaining_bailout_depth);
-  printf("ProfilingGraphExecutorImpl::new optimized_plan %s\n",
-    optimized_plan_->graph->toString().c_str());
+  // printf("ProfilingGraphExecutorImpl::new optimized_plan %s\n",
+    // optimized_plan_->graph->toString().c_str());
   return *optimized_plan_;
 }
 

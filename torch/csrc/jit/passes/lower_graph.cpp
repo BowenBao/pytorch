@@ -63,10 +63,25 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
 
     auto iv = slot.obj->getSlot(slot.offset);
     if (!iv.isTensor()) {
-      WithInsertPoint guard(*g->nodes().begin());
-      auto v = g->insertConstant(iv);
-      slot_to_value[slot] = {0, v};
-      return v;
+      // printf("iv kind is %s\n", iv.type()->python_str().c_str());
+      if (iv.isTensorList()) {
+        auto ts = iv.toTensorList();
+        std::vector<torch::jit::Value*> vs;
+        for (const at::Tensor& t : ts) {
+          vs.emplace_back(g->addInput()->setType(TensorType::create(t)));
+        }
+        WithInsertPoint guard(*g->nodes().begin());
+        auto v = g->insertNode(g->create(prim::ListConstruct, vs))->output();
+        v->setType(iv.type());
+        slot_to_value[slot] = {0, v};
+        extra_ivalues.emplace_back(slot);
+        return v;
+      } else {
+        WithInsertPoint guard(*g->nodes().begin());
+        auto v = g->insertConstant(iv);
+        slot_to_value[slot] = {0, v};
+        return v;
+      }
     } else {
       extra_ivalues.emplace_back(slot);
       slot_to_value[slot] = {extra_ivalues.size() - 1, nullptr};
@@ -91,7 +106,7 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
   while (to_scan.size() > 0) {
     auto e = to_scan.back();
     to_scan.pop_back();
-    printf("To scan node kind %s\n", e.n->kind().toDisplayString());
+    // printf("To scan node kind %s\n", e.n->kind().toDisplayString());
 
     // when we lambda lift forks, first-class modules may be passed across
     // forks. This code recursively lowers the module in the fork call.
@@ -111,9 +126,9 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
           << "Couldn't export Python method.";
     }
     if (e.n->kind() == prim::SetAttr) {
-      printf("Enter SetAttr\n");
+      // printf("Enter SetAttr\n");
       size_t slot_idx = e.mod->type()->getAttributeSlot(e.n->s(attr::name));
-      printf("SetAttr %s on slot %zu\n", e.n->s(attr::name).c_str(), slot_idx);
+      // printf("SetAttr %s on slot %zu\n", e.n->s(attr::name).c_str(), slot_idx);
       AT_ASSERT(e.n->inputs().size() >= 2);
       auto v = e.n->input(1);
       Slot slot = {e.mod, slot_idx};
@@ -126,12 +141,12 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
         e.n->destroy();
         continue;
       }
-      printf("now graph looks like: %s\n", g->toString().c_str());
+      // printf("now graph looks like: %s\n", g->toString().c_str());
       if (slot_to_value.find(slot) != slot_to_value.end()) {
-        printf("Set attr update slot\n");
+        // printf("Set attr update slot\n");
         slot_to_value[slot].value = v;
       } else {
-        printf("Set attr new slot\n");
+        // printf("Set attr new slot\n");
         slot_to_value[slot] = {0, v};
       }
       e.n->destroy();
@@ -145,7 +160,7 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
     }
     // printf("kind is %s\n", e.n->kind().toDisplayString()); // prim::getAttr
     size_t slot_idx = e.mod->type()->getAttributeSlot(e.n->s(attr::name));
-    printf("GetAttr %s on slot %zu\n", e.n->s(attr::name).c_str(), slot_idx);
+    // printf("GetAttr %s on slot %zu\n", e.n->s(attr::name).c_str(), slot_idx);
     // printf("output type is %s (%zu)outputs with attr name %s slot_idx: %zu of module %s\n",
     //   e.n->output(0)->type()->python_str().c_str(),
     //   e.n->outputs().size(),
@@ -191,8 +206,17 @@ std::pair<std::shared_ptr<Graph>, std::vector<Slot>> lower_graph(
 static std::vector<at::Tensor> loadTensors(const std::vector<Slot>& slots) {
   std::vector<at::Tensor> result;
   result.reserve(slots.size());
+  // printf("loadTensors: %zu slots.\n", slots.size());
   for (const Slot& slot : slots) {
-    result.emplace_back(slot.obj->getSlot(slot.offset).toTensor());
+    auto iv = slot.obj->getSlot(slot.offset);
+    if (iv.isTensorList()) {
+      // printf("loadTensors: tensor list of %zu tensors.\n", iv.toTensorList().size());
+      for (const at::Tensor& v : iv.toTensorList()) {
+        result.emplace_back(v);
+      }
+    } else {
+      result.emplace_back(iv.toTensor());
+    }
   }
   return result;
 }

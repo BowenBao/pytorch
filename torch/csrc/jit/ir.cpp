@@ -864,6 +864,7 @@ bool Node::matches(const FunctionSchema& schema) const {
 
   // not enough inputs
   if (actuals.size() < formals.size()) {
+    // printf(" Not enough inputs. ");
     return false;
   }
 
@@ -873,6 +874,7 @@ bool Node::matches(const FunctionSchema& schema) const {
     const MatchTypeReturn matched_type = matchTypeVariables(
         formal, actuals[i]->type(), type_env);
     if (!matched_type.success()) {
+      // printf(" Input type mismatch ");
       return false;
     }
 
@@ -886,12 +888,14 @@ bool Node::matches(const FunctionSchema& schema) const {
     // check can still succeed.
 
     if (!actuals[i]->type()->isSubtypeOf(formal)) {
+      // printf(" Input type subtype mismatch ");
       return false;
     }
   }
 
   // too many inputs
   if (!schema.is_vararg() && actuals.size() != formals.size()) {
+    // printf(" Too many inputs ");
     return false;
   }
 
@@ -943,15 +947,20 @@ const FunctionSchema* Node::maybeSchema() const {
 }
 
 const Operator* Node::maybeOperator() const {
+  // printf("MaybeOperator kind %s: op_ %d ", kind().toDisplayString(), int(op_ != nullptr));
   if (!op_) {
     const auto& candidates = getAllOperatorsFor(kind());
+    // printf(" candidates count %d ", candidates.size());
     for (const auto& candidate : candidates) {
+      // printf(" candidate name %s ", candidate->schema().name().c_str());
       if (matches(candidate->schema())) {
         op_ = candidate.get();
         break;
       }
     }
+    // printf(" no match.");
   }
+  // printf("\n");
   return op_;
 }
 

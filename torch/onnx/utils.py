@@ -94,7 +94,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
 
     # Remove fork/wait nodes
     torch._C._jit_pass_inline_fork_wait(graph)
-    print('before dce: ', graph)
+    # print('before dce: ', graph)
     torch._C._jit_pass_dce(graph)
     torch._C._jit_pass_lint(graph)
 
@@ -113,15 +113,15 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
 
     torch._C._jit_pass_canonicalize_ops(graph)
     torch._C._jit_pass_lint(graph)
-    print('before', graph)
+    # print('before', graph)
 
     torch._C._jit_pass_peephole(graph, True)
     torch._C._jit_pass_lint(graph)
-    print('after peephole', graph)
+    # print('after peephole', graph)
 
     if operator_export_type != OperatorExportTypes.RAW:
         torch._C._jit_pass_onnx_prepare_inplace_ops_for_onnx(graph)
-        print('after prepare inplace ops', graph)
+        # print('after prepare inplace ops', graph)
 
         # onnx does not support tuples, so try to remove them
         torch._C._jit_pass_lower_all_tuples(graph)
@@ -157,7 +157,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
 
         torch._C._jit_pass_fixup_jit_exceptions(graph)
 
-        print('pre onnx graph:', graph)
+        # print('pre onnx graph:', graph)
         graph = torch._C._jit_pass_onnx(graph, operator_export_type)
         print('post onnx graph:', graph)
         torch._C._jit_pass_lint(graph)
@@ -310,23 +310,24 @@ def _model_to_graph(model, args, verbose=False, training=False,
         example_outputs = [example_outputs]
 
     torch_out = None
-    print('type is', type(model))
+    # print('type is', type(model))
     if isinstance(model, torch.jit.ScriptModule):
         assert example_outputs is not None, "example_outputs must be provided when exporting a ScriptModule"
         try:
-            print('run model once for warm up')
+            # print('run model once for warm up')
             # backup model to preserve original attribute values.
             model_copy = model.copy()
             # run model once to get profiled graph.
             model(*args)
-            print('run model complete')
+            # print('run model complete')
             # debug code
-            print('get profiled graph')
+            # print('get profiled graph')
             graph = model.forward._profiled_graph
-            print('got profiled graph: ', graph)
+            # print('got profiled graph: ', graph)
             method_graph, params = torch._C._jit_pass_lower_graph(graph, model_copy._c)
-            print('after lower graph: ', method_graph, params)
+            # print('after lower graph: ', method_graph, params)
             in_vars, in_desc = torch.jit._flatten(tuple(args) + tuple(params))
+            # print('num of in_vars is: ', len(in_vars))
             graph = _propagate_and_assign_input_shapes(
                 method_graph, tuple(in_vars), False, propagate)
         except AttributeError:
@@ -359,7 +360,7 @@ def _model_to_graph(model, args, verbose=False, training=False,
                             fixed_batch_size=fixed_batch_size, params_dict=params_dict)
 
     if isinstance(model, torch.jit.ScriptModule) or isinstance(model, torch.jit.ScriptFunction):
-        print('example outputs:', example_outputs)
+        # print('example outputs:', example_outputs)
         out_vars, _ = torch.jit._flatten(tuple(example_outputs))
         graph = _assign_output_shapes(graph, out_vars)
 
@@ -483,7 +484,7 @@ def _export(model, args, f, export_params=True, verbose=False, training=False,
                                                          opset_version)
         val_add_node_names = _decide_add_node_names(add_node_names, operator_export_type)
         val_do_constant_folding = _decide_constant_folding(do_constant_folding, operator_export_type)
-        print('call model to graph')
+        # print('call model to graph')
         graph, params_dict, torch_out = _model_to_graph(model, args, verbose,
                                                         training, input_names,
                                                         output_names, operator_export_type,
