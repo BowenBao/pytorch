@@ -347,8 +347,29 @@ def _model_to_graph(model, args, verbose=False,
         try:
             graph = model.forward.graph
             torch._C._jit_pass_onnx_function_substitution(graph)
-            method_graph, params = torch._C._jit_pass_lower_graph(graph, model._c)
+
+            # New freezing pass
+            print('pre freeze:', graph)
+            freezed_m = torch._C._freeze_module(model._c)
+            method_graph = freezed_m._get_method('forward').graph
+            print('post freeze:', method_graph)
+            params = []
+
+            # Old pass
+            # method_graph, params = torch._C._jit_pass_lower_graph(graph, model._c)
+
             in_vars, in_desc = torch.jit._flatten(tuple(args) + tuple(params))
+
+            ### NOTE: freeze pass adds %self as first graph input, remove it.
+            #         this might fail if %self is still used somewhere in the graph.
+            method_graph.eraseInput(0)
+
+            # New functionalization pass.
+            print('pre-fun:', method_graph)
+            torch._C._jit_pass_inline_functional_graphs(method_graph)
+            torch._C._jit_pass_create_functional_graphs(method_graph)
+            torch._C._jit_pass_remove_mutation(method_graph)
+            print('post-fun:', method_graph)
             graph = _propagate_and_assign_input_shapes(
                 method_graph, tuple(in_vars), False, propagate)
         except AttributeError:

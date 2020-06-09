@@ -108,7 +108,8 @@ class TestONNXRuntime(unittest.TestCase):
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(0)
         np.random.seed(seed=0)
-        self.is_script_test_enabled = False
+        # NOTE: This is to enable script testing for all existing test case.
+        self.is_script_test_enabled = True
 
     def run_test(self, model, input, rtol=1e-3, atol=1e-7, do_constant_folding=True,
                  batch_size=2, use_gpu=True, dynamic_axes=None, test_with_inputs=None,
