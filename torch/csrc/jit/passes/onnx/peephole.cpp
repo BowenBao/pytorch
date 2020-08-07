@@ -677,6 +677,25 @@ static void fuseUnbindListUnpack(Block* b) {
   }
 }
 
+static bool isSplitToSequenceConvertableToSlice(Node* split_node) {
+  // Check if number of output is fixed.
+  if (split_node->outputs().size() != 1) {
+    return false;
+  }
+  auto uses = split_node->output()->uses();
+  if (uses.size() != 1 || uses[0].user->kind() != prim::ListUnpack) {
+    return false;
+  }
+
+  // Check if split sizes are fixed.
+  if (split_node->inputs().size() != 2 || split_node->input(1)->node()->kind() != prim::ListConstruct) {
+    return false;
+  }
+
+  return true;
+}
+
+
 // Traced Split with list of sizes is being converted to ONNX as SplitToSequence
 // + SequenceAt. Example IR
 //  %2 : Tensor[] = onnx::SplitToSequence[axis=0](%input, %split_list)
@@ -695,22 +714,58 @@ static void fuseSplitToSequenceListUnpack(Block* b) {
     }
     if (it->kind() == prim::ListUnpack &&
         it->input()->node()->kind() == onnx::SplitToSequence) {
-      Node* orig_split_to_sequence_node = it->input()->node();
-      for (size_t i = 0; i < it->outputs().size(); ++i) {
-        Node* split_const_node = b->owningGraph()->create(onnx::Constant, 1);
-        auto tensor = at::empty(1, c10::kLong);
-        int64_t* data = tensor.data_ptr<int64_t>();
-        *data = i;
-        split_const_node->t_(attr::value, autograd::make_variable(tensor));
-        split_const_node->insertAfter(orig_split_to_sequence_node);
-        Node* seq_at_node = b->owningGraph()->create(
-            onnx::SequenceAt, {it->input(), split_const_node->output()});
-        seq_at_node->output()->copyMetadata(it->output(i));
-        it->output(i)->replaceAllUsesWith(seq_at_node->output());
-        seq_at_node->insertAfter(split_const_node);
+
+      auto split_node = it->input()->node();
+
+      if (isSplitToSequenceConvertableToSlice(split_node)) {
+        // Convert to Split.
+        auto split_sizes_node = split_node->input(1)->node();
+        auto listUnpack_node = *it;
+        auto axis = b->owningGraph()->create(onnx::Constant);
+        axis->insertBefore(split_node);
+        axis->t_(attr::value, at::full({1}, split_node->i(attr::axis), at::kLong));
+        Node* init_start = b->owningGraph()->create(onnx::Constant);
+        init_start->insertBefore(split_node);
+        init_start->t_(attr::value, at::full({1}, 0, at::kLong));
+        Node* prev_end = nullptr;
+        for (size_t i = 0; i < split_sizes_node->inputs().size(); ++i) {
+          auto start = (i == 0) ? init_start : prev_end;
+          auto end = b->owningGraph()->create(onnx::Add);
+          end->insertBefore(split_node);
+          end->addInput(start->output());
+          end->addInput(split_sizes_node->input(i));
+          Node* slice_node = b->owningGraph()->create(onnx::Slice);
+          slice_node->insertBefore(split_node);
+          slice_node->addInput(split_node->input(0));
+          slice_node->addInput(start->output());
+          slice_node->addInput(end->output());
+          slice_node->addInput(axis->output());
+          slice_node->output()->copyMetadata(it->output(i));
+          it->output(i)->replaceAllUsesWith(slice_node->output());
+          prev_end = end;
+        }
+        it->removeAllInputs();
+        it.destroyCurrent();
+        // split_node->removeAllInputs();
+        // split_node->destroy();
+      } else {
+        Node* orig_split_to_sequence_node = it->input()->node();
+        for (size_t i = 0; i < it->outputs().size(); ++i) {
+          Node* split_const_node = b->owningGraph()->create(onnx::Constant, 1);
+          auto tensor = at::empty(1, c10::kLong);
+          int64_t* data = tensor.data_ptr<int64_t>();
+          *data = i;
+          split_const_node->t_(attr::value, autograd::make_variable(tensor));
+          split_const_node->insertAfter(orig_split_to_sequence_node);
+          Node* seq_at_node = b->owningGraph()->create(
+              onnx::SequenceAt, {it->input(), split_const_node->output()});
+          seq_at_node->output()->copyMetadata(it->output(i));
+          it->output(i)->replaceAllUsesWith(seq_at_node->output());
+          seq_at_node->insertAfter(split_const_node);
+        }
+        it->removeAllInputs();
+        it.destroyCurrent();
       }
-      it->removeAllInputs();
-      it.destroyCurrent();
     }
   }
 }
