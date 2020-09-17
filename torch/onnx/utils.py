@@ -426,8 +426,6 @@ def _model_to_graph(model, args, verbose=False,
     # erased by some optimizations, so we need to set it explicitly again.
     if torch_out is not None:
         output_tensors, _ = torch._C._jit_flatten(torch_out)
-        for o in output_tensors:
-            print(o.shape)
         graph = torch._C._jit_pass_onnx_assign_output_shape(graph, output_tensors, _onnx_shape_inference)
 
     _set_input_and_output_names(graph, input_names, output_names)
