@@ -18,7 +18,6 @@ from torch.onnx.symbolic_helper import (_set_opset_version, _set_operator_export
                                         _is_tensor_list, _is_tensor, _is_none)
 
 
-
 def verify_inferred_shape(graph):
     # Check every node in graph has type properly assigned.
     for n in graph.nodes():
@@ -70,7 +69,6 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
                                             training=TrainingMode.EVAL,
                                             use_new_jit_passes=self.use_new_jit_passes,
                                             dynamic_axes=dynamic_axes)
-
         verify_inferred_shape(graph)
 
 

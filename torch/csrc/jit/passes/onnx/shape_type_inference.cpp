@@ -91,7 +91,6 @@ TensorTypePtr TorchTensorTypeFromONNX(
       if (dim.has_dim_value()) {
         sizes.emplace_back(c10::ShapeSymbol::fromStaticSize(dim.dim_value()));
       } else {
-        // TODO: handle dim_param?
         GRAPH_UPDATE("Got dim_param:", dim.dim_param());
         c10::optional<c10::ShapeSymbol> sym = c10::nullopt;
         for (auto pair : symbol_map) {

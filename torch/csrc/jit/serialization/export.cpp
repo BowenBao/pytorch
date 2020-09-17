@@ -480,11 +480,6 @@ void EncoderBase::EncodeBlock(
     if (is_raw_export) {
       AT_ASSERT(!node->kind().is_onnx());
     } else if (operator_export_type_ == onnx_torch::OperatorExportTypes::ONNX) {
-      if (!(!node->kind().is_aten() && !node->kind().is_prim() &&
-          !node->kind().is_attr())) {
-        GRAPH_UPDATE("node: ", *node);
-        GRAPH_UPDATE("graph: ", node->owningGraph()->toString());
-      }
       AT_ASSERT(
           !node->kind().is_aten() && !node->kind().is_prim() &&
           !node->kind().is_attr());
