@@ -859,7 +859,8 @@ std::string pretty_print_onnx(
   return prettyPrint(graph_encoder.get_model_proto());
 }
 
-std::string SerializeToString(std::shared_ptr<::ONNX_NAMESPACE::ModelProto> proto) {
+std::string SerializeToString(
+    std::shared_ptr<::ONNX_NAMESPACE::ModelProto> proto) {
   return proto->SerializeAsString();
 }
 
@@ -868,7 +869,11 @@ std::string SerializeToString(std::shared_ptr<::ONNX_NAMESPACE::ModelProto> prot
 // conform to the ONNX op specification. Thus, the output will not
 // be interpretable by a ONNX-compatible framework. However, PyTorch or
 // libtorch will be able to import the IR and play it back.
-std::tuple<std::shared_ptr<::ONNX_NAMESPACE::ModelProto>, RawDataExportMap, SymbolDimMap> export_onnx(
+std::tuple<
+    std::shared_ptr<::ONNX_NAMESPACE::ModelProto>,
+    RawDataExportMap,
+    SymbolDimMap>
+export_onnx(
     const std::shared_ptr<Graph>& graph,
     const std::map<std::string, at::Tensor>& initializers,
     int64_t onnx_opset_version,
@@ -903,7 +908,8 @@ std::tuple<std::shared_ptr<::ONNX_NAMESPACE::ModelProto>, RawDataExportMap, Symb
       "Please call torch.onnx.export with use_external_data_format=True.");
   GRAPH_DEBUG("onnx proto:", prettyPrint(graph_encoder.get_model_proto()));
   return std::make_tuple(
-      std::make_shared<::ONNX_NAMESPACE::ModelProto>(graph_encoder.get_model_proto()),
+      std::make_shared<::ONNX_NAMESPACE::ModelProto>(
+          graph_encoder.get_model_proto()),
       graph_encoder.get_raw_data_export_map(),
       graph_encoder.get_symbol_dim_param_map());
 }

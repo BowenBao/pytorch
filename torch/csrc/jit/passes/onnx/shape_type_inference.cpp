@@ -126,7 +126,8 @@ ListTypePtr TorchListTypeFromONNX(
     auto onnx_seq_elem_type = onnx_sequence_type.elem_type();
     if (onnx_seq_elem_type.has_tensor_type()) {
       auto onnx_tensor_type = onnx_seq_elem_type.tensor_type();
-      auto v_tensor_type = TorchTensorTypeFromONNX(onnx_tensor_type, symbol_map);
+      auto v_tensor_type =
+          TorchTensorTypeFromONNX(onnx_tensor_type, symbol_map);
       auto v_type = ListType::create(v_tensor_type);
       return v_type;
     }
@@ -144,12 +145,14 @@ void UpdateTorchValueByOnnxValueInfo(
 
   auto p_type = p_info.type();
   if (p_type.has_tensor_type()) {
-    auto torch_tensor_type = TorchTensorTypeFromONNX(p_type.tensor_type(), symbol_map);
+    auto torch_tensor_type =
+        TorchTensorTypeFromONNX(p_type.tensor_type(), symbol_map);
     if (torch_tensor_type) {
       v->setType(torch_tensor_type);
     }
   } else if (p_type.has_sequence_type()) {
-    auto torch_list_type = TorchListTypeFromONNX(p_type.sequence_type(), symbol_map);
+    auto torch_list_type =
+        TorchListTypeFromONNX(p_type.sequence_type(), symbol_map);
     if (torch_list_type) {
       v->setType(torch_list_type);
     }
@@ -356,7 +359,8 @@ void ONNXShapeTypeInference(Node* n, int opset_version) {
     onnx::ModelProto model_proto;
     SymbolDimMap symbol_map;
     ConvertGraphToONNXProto(n_graph, model_proto, symbol_map, opset_version);
-    GRAPH_DEBUG("ONNX graph to run shape inference: ", prettyPrint(model_proto));
+    GRAPH_DEBUG(
+        "ONNX graph to run shape inference: ", prettyPrint(model_proto));
 
     // infer shape
     onnx::shape_inference::InferShapes(model_proto);
@@ -378,7 +382,7 @@ std::shared_ptr<Graph> ONNXSetDynamicInputShape(
     const std::vector<std::string>& input_names) {
   GRAPH_UPDATE("ONNX set dynamic input shape.");
   auto new_graph = graph->copy();
-  GRAPH_UPDATE("dynamic axes tensor names:", [&](){
+  GRAPH_UPDATE("dynamic axes tensor names:", [&]() {
     std::vector<std::string> res;
     for (auto it : dynamic_axes) {
       res.emplace_back(it.first);
@@ -393,7 +397,8 @@ std::shared_ptr<Graph> ONNXSetDynamicInputShape(
     if (dynamic_axes.find(input_name) != dynamic_axes.end()) {
       auto axes_names = dynamic_axes.find(input_name)->second;
       TORCH_INTERNAL_ASSERT(i < new_graph->inputs().size());
-      auto input_tensor_type = new_graph->inputs()[i]->type()->cast<TensorType>();
+      auto input_tensor_type =
+          new_graph->inputs()[i]->type()->cast<TensorType>();
       if (!input_tensor_type) {
         continue;
       }
@@ -409,7 +414,8 @@ std::shared_ptr<Graph> ONNXSetDynamicInputShape(
         shape[axis] = name_to_sym[name];
       }
 
-      new_graph->inputs()[i]->setType(input_tensor_type->withSymbolicShapes(::c10::SymbolicShape(shape)));
+      new_graph->inputs()[i]->setType(
+          input_tensor_type->withSymbolicShapes(::c10::SymbolicShape(shape)));
     }
   }
 
@@ -424,7 +430,8 @@ std::shared_ptr<Graph> ONNXAssignOutputShape(
   TORCH_INTERNAL_ASSERT(retval->outputs().size() == outputs.size());
   for (size_t i = 0; i < outputs.size(); ++i) {
     if (onnx_shape_inference) {
-      retval->outputs()[i]->setType(MergeInferredType(TensorType::create(outputs[i]), retval->outputs()[i]->type()));
+      retval->outputs()[i]->setType(MergeInferredType(
+          TensorType::create(outputs[i]), retval->outputs()[i]->type()));
     } else {
       retval->outputs()[i]->inferTypeFrom(outputs[i]);
     }

@@ -139,10 +139,11 @@ void initJITBindings(PyObject* module) {
       .def("_jit_pass_onnx_remove_print", RemovePrintOps)
       .def("_jit_pass_onnx_preprocess_caffe2", PreprocessCaffe2Ops)
       .def("_jit_pass_onnx", ToONNX)
-      .def("_jit_pass_onnx_assign_output_shape",
+      .def(
+          "_jit_pass_onnx_assign_output_shape",
           [](std::shared_ptr<Graph>& graph,
              std::vector<at::Tensor> tensors,
-             bool onnx_shape_inference=false) {
+             bool onnx_shape_inference = false) {
             return ONNXAssignOutputShape(graph, tensors, onnx_shape_inference);
           })
       .def("_jit_pass_lower_all_tuples", LowerAllTuples)

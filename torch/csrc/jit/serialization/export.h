@@ -27,9 +27,14 @@ using RawDataExportMap = std::unordered_map<std::string, at::Tensor>;
 
 using SymbolDimMap = std::map<c10::ShapeSymbol, std::string>;
 
-TORCH_API std::string SerializeToString(std::shared_ptr<::ONNX_NAMESPACE::ModelProto> proto);
+TORCH_API std::string SerializeToString(
+    std::shared_ptr<::ONNX_NAMESPACE::ModelProto> proto);
 
-TORCH_API std::tuple<std::shared_ptr<::ONNX_NAMESPACE::ModelProto>, RawDataExportMap, SymbolDimMap> export_onnx(
+TORCH_API std::tuple<
+    std::shared_ptr<::ONNX_NAMESPACE::ModelProto>,
+    RawDataExportMap,
+    SymbolDimMap>
+export_onnx(
     const std::shared_ptr<Graph>& graph,
     const std::map<std::string, at::Tensor>& initializers,
     int64_t onnx_opset_version,
