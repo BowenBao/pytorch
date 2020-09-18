@@ -9,8 +9,7 @@ import torch
 import copy
 
 import test_pytorch_onnx_onnxruntime
-from test_pytorch_onnx_onnxruntime import (TestONNXRuntime, convert_to_onnx,
-                                           ort_compare_with_pytorch, run_ort)
+from test_pytorch_onnx_onnxruntime import TestONNXRuntime
 from torch.onnx import utils, OperatorExportTypes, TrainingMode
 from torch.onnx.utils import _validate_dynamic_axes
 from torch.onnx.symbolic_helper import (_set_opset_version, _set_operator_export_type,

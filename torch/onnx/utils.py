@@ -17,7 +17,7 @@ import warnings
 from torch._six import string_classes
 from torch.jit import _unique_state_dict
 from torch.onnx import ONNX_ARCHIVE_MODEL_PROTO_NAME, ExportTypes, OperatorExportTypes, TrainingMode
-from torch._C import ListType, OptionalType, _propagate_and_assign_input_shapes, _assign_output_shapes, _check_onnx_proto
+from torch._C import ListType, OptionalType, _propagate_and_assign_input_shapes, _check_onnx_proto
 
 
 # the flag to tell the user whether it's in the middle of ONNX export or not
@@ -121,7 +121,7 @@ def _split_tensor_list_constants(g, block):
 
 
 def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=False, fixed_batch_size=False,
-                    params_dict=None, use_new_jit_passes=False, dynamic_axes={}, input_names=None):
+                    params_dict=None, use_new_jit_passes=False, dynamic_axes=None, input_names=None):
     # Inline everything
     torch._C._jit_pass_inline(graph)
 
@@ -393,7 +393,7 @@ def _model_to_graph(model, args, verbose=False,
                     _retain_param_name=False, do_constant_folding=True,
                     _disable_torch_constant_prop=False, fixed_batch_size=False,
                     training=None, use_new_jit_passes=False,
-                    dynamic_axes={}):
+                    dynamic_axes=None):
     from torch.onnx.symbolic_helper import _export_onnx_opset_version
     # Special case for common case of passing a single Tensor
     if isinstance(args, torch.Tensor):

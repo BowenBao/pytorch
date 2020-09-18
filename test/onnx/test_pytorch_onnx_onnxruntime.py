@@ -624,7 +624,7 @@ class TestONNXRuntime(unittest.TestCase):
         x = torch.randn(20, 16, 50, 100)
         self.run_test(Model(), x, atol=10e-5,
                       input_names=['x'],
-                      dynamic_axes={'x':[0]})
+                      dynamic_axes={'x': [0]})
 
     def test_conv_transpose(self):
         class TraceModel(torch.nn.Module):

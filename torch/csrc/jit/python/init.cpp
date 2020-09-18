@@ -142,7 +142,7 @@ void initJITBindings(PyObject* module) {
       .def(
           "_jit_pass_onnx_assign_output_shape",
           [](std::shared_ptr<Graph>& graph,
-             std::vector<at::Tensor> tensors,
+             const std::vector<at::Tensor>& tensors,
              bool onnx_shape_inference = false) {
             return ONNXAssignOutputShape(graph, tensors, onnx_shape_inference);
           })

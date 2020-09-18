@@ -490,21 +490,6 @@ static std::shared_ptr<Graph> _propagate_and_assign_input_shapes(
   return retval;
 }
 
-static std::shared_ptr<Graph> _assign_output_shapes(
-    Graph& graph,
-    std::vector<at::Tensor> outputs) {
-  auto retval = graph.copy();
-  AT_ASSERT(retval->outputs().size() == outputs.size());
-  for (size_t i = 0; i < outputs.size(); ++i) {
-    auto scalar_type = outputs[i].scalar_type();
-    auto sizes = outputs[i].sizes();
-    auto type =
-        torch::jit::TensorType::createContiguous(scalar_type, at::kCPU, sizes);
-    retval->outputs()[i]->setType(type);
-  }
-  return retval;
-}
-
 void addFunctionToModule(Module& module, const StrongFunctionPtr& func) {
   // Make a graph with a fake self argument
   auto graph = func.function_->graph()->copy();
@@ -1439,7 +1424,6 @@ void initJitScriptBindings(PyObject* module) {
   m.def("_propagate_shapes", _propagate_shapes);
   m.def(
       "_propagate_and_assign_input_shapes", _propagate_and_assign_input_shapes);
-  m.def("_assign_output_shapes", _assign_output_shapes);
   m.def(
       "_last_executed_optimized_graph",
       []() { return lastExecutedOptimizedGraph(); },
