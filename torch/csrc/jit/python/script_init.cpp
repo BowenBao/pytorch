@@ -790,7 +790,8 @@ void initJitScriptBindings(PyObject* module) {
                 err << "which does not have a __getstate__ method defined!";
                 throw std::runtime_error(err.str());
               },
-              [](const std::tuple<py::object, std::string>& state_tup) -> Object {
+              [](const std::tuple<py::object, std::string>& state_tup)
+                  -> Object {
                 py::object state;
                 std::string qualname;
                 std::tie(state, qualname) = state_tup;
@@ -957,7 +958,10 @@ void initJitScriptBindings(PyObject* module) {
              ResolutionCallback rcb) {
             const auto self = ModuleSelf(std::move(concreteType));
             m._ivalue()->compilation_unit()->define(
-                *m.type()->name(), script, pythonResolver(std::move(rcb)), &self);
+                *m.type()->name(),
+                script,
+                pythonResolver(std::move(rcb)),
+                &self);
             didFinishEmitModule(m);
           })
       .def(
@@ -1091,7 +1095,8 @@ void initJitScriptBindings(PyObject* module) {
           [](CompilationUnit& cu,
              const std::string& src,
              ResolutionCallback rcb) {
-            cu.define(c10::nullopt, src, pythonResolver(std::move(rcb)), nullptr);
+            cu.define(
+                c10::nullopt, src, pythonResolver(std::move(rcb)), nullptr);
           })
       .def(
           "get_interface",
@@ -1626,13 +1631,18 @@ void initJitScriptBindings(PyObject* module) {
 
   m.def(
       "_resolve_type",
-      [](const std::string& name, const SourceRange& range, ResolutionCallback rcb) {
+      [](const std::string& name,
+         const SourceRange& range,
+         ResolutionCallback rcb) {
         return pythonResolver(std::move(rcb))->resolveType(name, range);
       });
   m.def(
       "_resolve_type_from_object",
-      [](const py::object& obj, const SourceRange& range, ResolutionCallback rcb) {
-        return pythonResolver(std::move(rcb))->resolveTypeFromObject(obj, range);
+      [](const py::object& obj,
+         const SourceRange& range,
+         ResolutionCallback rcb) {
+        return pythonResolver(std::move(rcb))
+            ->resolveTypeFromObject(obj, range);
       });
 
   m.def(
