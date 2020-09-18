@@ -958,10 +958,7 @@ void initJitScriptBindings(PyObject* module) {
              const ResolutionCallback& rcb) {
             const auto self = ModuleSelf(std::move(concreteType));
             m._ivalue()->compilation_unit()->define(
-                *m.type()->name(),
-                script,
-                pythonResolver(rcb),
-                &self);
+                *m.type()->name(), script, pythonResolver(rcb), &self);
             didFinishEmitModule(m);
           })
       .def(
@@ -1095,8 +1092,7 @@ void initJitScriptBindings(PyObject* module) {
           [](CompilationUnit& cu,
              const std::string& src,
              const ResolutionCallback& rcb) {
-            cu.define(
-                c10::nullopt, src, pythonResolver(rcb), nullptr);
+            cu.define(c10::nullopt, src, pythonResolver(rcb), nullptr);
           })
       .def(
           "get_interface",
@@ -1641,8 +1637,7 @@ void initJitScriptBindings(PyObject* module) {
       [](const py::object& obj,
          const SourceRange& range,
          const ResolutionCallback& rcb) {
-        return pythonResolver(rcb)
-            ->resolveTypeFromObject(obj, range);
+        return pythonResolver(rcb)->resolveTypeFromObject(obj, range);
       });
 
   m.def(
