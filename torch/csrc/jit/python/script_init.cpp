@@ -146,11 +146,11 @@ struct PythonResolver : public Resolver {
   ClassTypePtr classType_;
 };
 
-std::shared_ptr<PythonResolver> pythonResolver(ResolutionCallback rcb) {
+std::shared_ptr<PythonResolver> pythonResolver(const ResolutionCallback& rcb) {
   return std::make_shared<PythonResolver>(rcb);
 }
 std::shared_ptr<PythonResolver> pythonResolver(
-    ResolutionCallback rcb,
+    const ResolutionCallback& rcb,
     std::string classname,
     ClassTypePtr classType) {
   return std::make_shared<PythonResolver>(
@@ -625,7 +625,7 @@ struct slot_dict_impl {
 template <typename T>
 py::list debugMakeList(const T& list) {
   py::list result;
-  for (auto elem : list) {
+  for (const auto& elem : list) {
     result.append(py::cast(elem));
   }
   return result;
@@ -665,7 +665,7 @@ static py::dict _jit_debug_module_iterators(Module& module) {
   return result;
 }
 
-static constexpr const char* magic_method_names[] = {
+static constexpr std::array<const char*, 47> magic_method_names = {
     "__lt__",      "__le__",      "__eq__",        "__ne__",
     "__ge__",      "__gt__",      "__not__",       "__abs__",
     "__add__",     "__and__",     "__floordiv__",  "__index__",
@@ -790,7 +790,7 @@ void initJitScriptBindings(PyObject* module) {
                 err << "which does not have a __getstate__ method defined!";
                 throw std::runtime_error(err.str());
               },
-              [](std::tuple<py::object, std::string> state_tup) -> Object {
+              [](const std::tuple<py::object, std::string>& state_tup) -> Object {
                 py::object state;
                 std::string qualname;
                 std::tie(state, qualname) = state_tup;
@@ -957,14 +957,14 @@ void initJitScriptBindings(PyObject* module) {
              ResolutionCallback rcb) {
             const auto self = ModuleSelf(std::move(concreteType));
             m._ivalue()->compilation_unit()->define(
-                *m.type()->name(), script, pythonResolver(rcb), &self);
+                *m.type()->name(), script, pythonResolver(std::move(rcb)), &self);
             didFinishEmitModule(m);
           })
       .def(
           "_register_attribute",
           [](Module& m,
              const std::string& name,
-             TypePtr type,
+             const TypePtr& type,
              py::handle value) {
             m.register_attribute(name, type, toIValue(value, type));
           })
@@ -972,9 +972,9 @@ void initJitScriptBindings(PyObject* module) {
           "_create_method_from_trace",
           [](Module& self,
              const std::string& name,
-             py::function func,
-             py::tuple input_tuple,
-             py::function var_lookup_fn,
+             const py::function& func,
+             const py::tuple& input_tuple,
+             const py::function& var_lookup_fn,
              bool strict,
              bool force_outplace) {
             // prereq: Module's buffers and parameters are unique
@@ -1091,7 +1091,7 @@ void initJitScriptBindings(PyObject* module) {
           [](CompilationUnit& cu,
              const std::string& src,
              ResolutionCallback rcb) {
-            cu.define(c10::nullopt, src, pythonResolver(rcb), nullptr);
+            cu.define(c10::nullopt, src, pythonResolver(std::move(rcb)), nullptr);
           })
       .def(
           "get_interface",
@@ -1263,10 +1263,10 @@ void initJitScriptBindings(PyObject* module) {
       });
   m.def(
       "_create_function_from_trace",
-      [](std::string qualname,
-         py::function func,
-         py::tuple input_tuple,
-         py::function var_lookup_fn,
+      [](const std::string& qualname,
+         const py::function& func,
+         const py::tuple& input_tuple,
+         const py::function& var_lookup_fn,
          bool strict,
          bool force_outplace) {
         auto typed_inputs = toTraceableStack(input_tuple);
@@ -1286,7 +1286,7 @@ void initJitScriptBindings(PyObject* module) {
       "_jit_script_class_compile",
       [](const std::string& qualifiedName,
          const ClassDef& classDef,
-         ResolutionCallback rcb) {
+         const ResolutionCallback& rcb) {
         C10_LOG_API_USAGE_ONCE("torch.script.class");
         if (classDef.superclass().present()) {
           throw ErrorReport(classDef.range())
@@ -1626,18 +1626,19 @@ void initJitScriptBindings(PyObject* module) {
 
   m.def(
       "_resolve_type",
-      [](const std::string& name, SourceRange range, ResolutionCallback rcb) {
-        return pythonResolver(rcb)->resolveType(name, range);
+      [](const std::string& name, const SourceRange& range, ResolutionCallback rcb) {
+        return pythonResolver(std::move(rcb))->resolveType(name, range);
       });
   m.def(
       "_resolve_type_from_object",
-      [](const py::object& obj, SourceRange range, ResolutionCallback rcb) {
-        return pythonResolver(rcb)->resolveTypeFromObject(obj, range);
+      [](const py::object& obj, const SourceRange& range, ResolutionCallback rcb) {
+        return pythonResolver(std::move(rcb))->resolveTypeFromObject(obj, range);
       });
 
   m.def(
       "_run_emit_module_hook", [](const Module& m) { didFinishEmitModule(m); });
 
+  // NOLINTNEXTLINE(bugprone-unused-raii)
   py::class_<logging::LoggerBase, std::shared_ptr<logging::LoggerBase>>(
       m, "LoggerBase");
   py::enum_<logging::LockingLogger::AggregationType>(m, "AggregationType")
