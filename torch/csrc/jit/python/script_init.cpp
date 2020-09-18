@@ -955,12 +955,12 @@ void initJitScriptBindings(PyObject* module) {
           [](Module& m,
              std::shared_ptr<ConcreteModuleType> concreteType,
              const std::string& script,
-             ResolutionCallback rcb) {
+             const ResolutionCallback& rcb) {
             const auto self = ModuleSelf(std::move(concreteType));
             m._ivalue()->compilation_unit()->define(
                 *m.type()->name(),
                 script,
-                pythonResolver(std::move(rcb)),
+                pythonResolver(rcb),
                 &self);
             didFinishEmitModule(m);
           })
@@ -1094,9 +1094,9 @@ void initJitScriptBindings(PyObject* module) {
           "define",
           [](CompilationUnit& cu,
              const std::string& src,
-             ResolutionCallback rcb) {
+             const ResolutionCallback& rcb) {
             cu.define(
-                c10::nullopt, src, pythonResolver(std::move(rcb)), nullptr);
+                c10::nullopt, src, pythonResolver(rcb), nullptr);
           })
       .def(
           "get_interface",
@@ -1633,15 +1633,15 @@ void initJitScriptBindings(PyObject* module) {
       "_resolve_type",
       [](const std::string& name,
          const SourceRange& range,
-         ResolutionCallback rcb) {
-        return pythonResolver(std::move(rcb))->resolveType(name, range);
+         const ResolutionCallback& rcb) {
+        return pythonResolver(rcb)->resolveType(name, range);
       });
   m.def(
       "_resolve_type_from_object",
       [](const py::object& obj,
          const SourceRange& range,
-         ResolutionCallback rcb) {
-        return pythonResolver(std::move(rcb))
+         const ResolutionCallback& rcb) {
+        return pythonResolver(rcb)
             ->resolveTypeFromObject(obj, range);
       });
 
