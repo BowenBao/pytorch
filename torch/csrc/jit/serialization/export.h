@@ -9,7 +9,7 @@
 #include <ostream>
 
 namespace ONNX_NAMESPACE {
-struct ModelProto;
+class ModelProto;
 }
 
 namespace torch {
