@@ -235,11 +235,11 @@ void initPythonIRBindings(PyObject* module_) {
              bool add_node_names,
              bool use_external_data_format,
              const std::string& onnx_file_path) {
-            std::shared_ptr<::ONNX_NAMESPACE::ModelProto> proto;
             std::string graph;
+            std::shared_ptr<::ONNX_NAMESPACE::ModelProto> model_proto;
             RawDataExportMap export_map;
             SymbolDimMap symbol_map;
-            std::tie(proto, export_map, symbol_map) = export_onnx(
+            std::tie(model_proto, export_map, symbol_map) = export_onnx(
                 g,
                 initializers,
                 onnx_opset_version,
@@ -252,7 +252,7 @@ void initPythonIRBindings(PyObject* module_) {
                 add_node_names,
                 use_external_data_format,
                 onnx_file_path);
-            graph = SerializeToString(proto);
+            graph = serialize_model_proto_to_string(model_proto);
             std::unordered_map<std::string, py::bytes>
                 python_serialized_export_map;
             for (auto& kv : export_map) {

@@ -859,11 +859,6 @@ std::string pretty_print_onnx(
   return prettyPrint(graph_encoder.get_model_proto());
 }
 
-std::string SerializeToString(
-    std::shared_ptr<::ONNX_NAMESPACE::ModelProto> proto) {
-  return proto->SerializeAsString();
-}
-
 // export_raw_ir will export IR ops without turning them into ONNX ops.
 // The output will use the ONNX protobuf format, but the ops will not
 // conform to the ONNX op specification. Thus, the output will not
@@ -912,6 +907,11 @@ export_onnx(
           graph_encoder.get_model_proto()),
       graph_encoder.get_raw_data_export_map(),
       graph_encoder.get_symbol_dim_param_map());
+}
+
+std::string serialize_model_proto_to_string(
+    const std::shared_ptr<::ONNX_NAMESPACE::ModelProto>& model_proto) {
+  return model_proto->SerializeAsString();
 }
 
 void check_onnx_proto(const std::string& proto_string) {

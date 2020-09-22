@@ -263,12 +263,11 @@ bool IsGraphValidForInference(std::shared_ptr<Graph> graph) {
 
 void ConvertGraphToONNXProto(
     std::shared_ptr<Graph> graph,
-    onnx::ModelProto& model_proto,
+    std::shared_ptr<onnx::ModelProto>& model_proto,
     SymbolDimMap& symbol_map,
     int opset_version) {
-  std::shared_ptr<onnx::ModelProto> proto_ptr;
   RawDataExportMap export_map;
-  std::tie(proto_ptr, export_map, symbol_map) = export_onnx(
+  std::tie(model_proto, export_map, symbol_map) = export_onnx(
       graph,
       {},
       opset_version,
@@ -281,9 +280,8 @@ void ConvertGraphToONNXProto(
       true,
       false,
       std::string());
-  model_proto = *proto_ptr;
-  for (int i = 0; i < model_proto.graph().output_size(); ++i) {
-    model_proto.mutable_graph()->mutable_output(i)->clear_type();
+  for (int i = 0; i < model_proto->graph().output_size(); ++i) {
+    model_proto->mutable_graph()->mutable_output(i)->clear_type();
   }
 }
 
@@ -356,17 +354,18 @@ void ONNXShapeTypeInference(Node* n, int opset_version) {
     // TODO: Some ops have conversion happen at Peephole pass.
     //       The conversion here is incomplete for these ops.
     //       e.g: ListConstruct, ListUnpack, etc.
-    onnx::ModelProto model_proto;
+    std::shared_ptr<onnx::ModelProto> model_proto;
     SymbolDimMap symbol_map;
     ConvertGraphToONNXProto(n_graph, model_proto, symbol_map, opset_version);
     GRAPH_DEBUG(
-        "ONNX graph to run shape inference: ", prettyPrint(model_proto));
+        "ONNX graph to run shape inference: ", prettyPrint(*model_proto));
 
     // infer shape
-    onnx::shape_inference::InferShapes(model_proto);
-    GRAPH_DEBUG("ONNX graph after shape inference: ", prettyPrint(model_proto));
+    onnx::shape_inference::InferShapes(*model_proto);
+    GRAPH_DEBUG(
+        "ONNX graph after shape inference: ", prettyPrint(*model_proto));
 
-    UpdateOutputTypeByONNXProto(n, clone_node, model_proto, symbol_map);
+    UpdateOutputTypeByONNXProto(n, clone_node, *model_proto, symbol_map);
   }
 
   SpecialPostProcess(n);
