@@ -438,5 +438,13 @@ std::shared_ptr<Graph> ONNXAssignOutputShape(
   return retval;
 }
 
+std::shared_ptr<Graph> ONNXShapeTypeInference(std::shared_ptr<Graph>& graph, int opset_version) {
+  auto retval = graph->copy();
+  for (auto n : retval->nodes()) {
+    ONNXShapeTypeInference(n, opset_version);
+  }
+  return retval;
+}
+
 } // namespace jit
 } // namespace torch

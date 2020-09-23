@@ -26,5 +26,7 @@ TORCH_API std::shared_ptr<Graph> ONNXAssignOutputShape(
 // n with inferred shape and type. Otherwise n is unchanged.
 TORCH_API void ONNXShapeTypeInference(Node* n, int opset_version);
 
+TORCH_API std::shared_ptr<Graph> ONNXShapeTypeInference(std::shared_ptr<Graph>& g, int opset_version);
+
 } // namespace jit
 } // namespace torch

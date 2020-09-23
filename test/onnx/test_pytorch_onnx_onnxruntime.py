@@ -18,6 +18,7 @@ from test_pytorch_common import RNN_BATCH_SIZE, RNN_SEQUENCE_LENGTH, RNN_INPUT_S
 import model_defs.word_language_model as word_language_model
 import torchvision
 import onnx
+import time
 
 def to_numpy(tensor):
     if tensor.requires_grad:
@@ -34,6 +35,7 @@ def convert_to_onnx(model, input=None, opset_version=9, example_outputs=None,
     # export the model to ONNX
     f = io.BytesIO()
     input_copy = copy.deepcopy(input)
+    export_time = time.perf_counter()
     torch.onnx._export(model, input_copy, f,
                        opset_version=opset_version,
                        example_outputs=example_outputs,
@@ -44,6 +46,8 @@ def convert_to_onnx(model, input=None, opset_version=9, example_outputs=None,
                        fixed_batch_size=fixed_batch_size, training=training,
                        onnx_shape_inference=onnx_shape_inference,
                        use_new_jit_passes=use_new_jit_passes)
+    export_time = time.perf_counter() - export_time
+    print('Time to export: ', export_time)
 
     # compute onnxruntime output prediction
     ort_sess = onnxruntime.InferenceSession(f.getvalue())

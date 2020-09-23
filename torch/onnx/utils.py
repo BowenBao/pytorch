@@ -218,6 +218,9 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     torch._C._jit_pass_lint(graph)
     graph = torch._C._jit_pass_canonicalize(graph)
     torch._C._jit_pass_lint(graph)
+    from torch.onnx.symbolic_helper import _onnx_shape_inference, _export_onnx_opset_version
+    if _onnx_shape_inference:
+        graph = torch._C._jit_pass_onnx_graph_shape_type_inference(graph, _export_onnx_opset_version)
     return graph
 
 
@@ -519,12 +522,12 @@ def _find_missing_ops_onnx_export(model, args, f, verbose=False, training=Traini
                                   input_names=None, output_names=None, opset_version=None, dynamic_axes=None):
     r"""
     This diagnostic tool runs your model with operator_export_type set to
-    OperatorExportTypes.ONNX_FALLTHROUGH once in order to get a list of 
+    OperatorExportTypes.ONNX_FALLTHROUGH once in order to get a list of
     all the ops that are not supported/implemented by the current exporter
 
     operator_export_type is set to OperatorExportTypes.ONNX_FALLTHROUGH by default
         OperatorExportTypes.ONNX_FALLTHROUGH: If an op is not supported
-        in ONNX, fall through and export the operator as is, as a custom 
+        in ONNX, fall through and export the operator as is, as a custom
         ONNX op. Using this mode, the op can be exported and implemented by
         the user for their runtime backend.
         Example graph::
@@ -543,7 +546,7 @@ def _find_missing_ops_onnx_export(model, args, f, verbose=False, training=Traini
                 %5 : Float(2:12, 3:4, 4:1, requires_grad=0, device=cpu) = aten::cumsum(%0, %6, %4) # main.py:6:0
                 return (%5)
 
-        In the above example, aten::cumsum in not implemented in opset 9, hence exporter falls 
+        In the above example, aten::cumsum in not implemented in opset 9, hence exporter falls
         through and provides a list of unsupported ops, the result being:
             Unsupported ops : [aten:cumsum]
     """
