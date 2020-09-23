@@ -195,11 +195,13 @@ void initJITBindings(PyObject* module) {
       .def(
           "_jit_pass_onnx_prepare_inplace_ops_for_onnx",
           PrepareInplaceOpsForONNX)
-      .def("_jit_pass_onnx_node_shape_type_inference",
+      .def(
+          "_jit_pass_onnx_node_shape_type_inference",
           [](Node* n, int opset_version) {
             ONNXShapeTypeInference(n, opset_version);
           })
-      .def("_jit_pass_onnx_graph_shape_type_inference",
+      .def(
+          "_jit_pass_onnx_graph_shape_type_inference",
           [](std::shared_ptr<Graph>& graph, int opset_version) {
             return ONNXShapeTypeInference(graph, opset_version);
           })
