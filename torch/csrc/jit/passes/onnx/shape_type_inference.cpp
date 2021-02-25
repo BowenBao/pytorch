@@ -406,6 +406,7 @@ c10::optional<at::Tensor> ComputeConstantFolding(Node* n, int opset_version) {
   // which does not meet the criteria, so it may get errors. A possible solution
   // is to put _jit_pass_onnx_fold_if pass in an earlier stage.
   try {
+    GRAPH_UPDATE("Start running torch backend for onnx.");
     return onnx_constant_fold::runTorchBackendForOnnx(
         n, inputTensorValues, opset_version);
   } catch (const std::exception& ex) {
@@ -852,16 +853,21 @@ void ComputeConstant(Node* n, int opset_version) {
   size_t rank = 0;
 
   // Constant folding.
+  GRAPH_UPDATE("Start compute constant folding");
   auto const_fold_val = ComputeConstantFolding(n, opset_version);
+  GRAPH_UPDATE("Finish compute constant folding");
   if (const_fold_val.has_value()) {
+    GRAPH_UPDATE("compute constant folding 1");
     at::Tensor const_fold_val_copy = at::empty(
         const_fold_val.value().sizes(), const_fold_val.value().options());
+    GRAPH_UPDATE("compute constant folding 2");
     const_fold_val_copy.copy_(const_fold_val.value());
+    GRAPH_UPDATE("compute constant folding 3");
     ConstantValueMap::SetValue(n->output()->debugName(), const_fold_val_copy);
     UpdateShapeFromVector(n->output(), const_fold_val_copy.sizes().vec());
     return;
   }
-
+  GRAPH_UPDATE("compute constant folding 6");
   switch (n->kind()) {
     case ::c10::onnx::Shape: {
       auto input_shape =
@@ -1053,10 +1059,12 @@ void ComputeConstant(Node* n, int opset_version) {
       break;
     }
   }
+  GRAPH_UPDATE("compute constant folding 7");
   if (n->outputs().size() > 1 ||
       ConstantValueMap::HasShape(n->output(0)->debugName())) {
     return;
   }
+  GRAPH_UPDATE("compute constant folding 8");
   if (only_rank_available) {
     UpdateRank(n->output(), rank);
   }
@@ -1124,7 +1132,9 @@ void ProcessConstantValueMap(Node* n, int opset_version) {
     }
   }
   // Additional logic to update the graph and ConstantValueMap
+  GRAPH_UPDATE("Start computing constant");
   ComputeConstant(n, opset_version);
+  GRAPH_UPDATE("Finish computing constant");
 }
 
 // Any additional post process that are specific to individual node kind.
@@ -1156,6 +1166,82 @@ void SpecialPostProcess(Node* n) {
       if (TensorTypePtr t_type = n->input(1)->type()->cast<TensorType>()) {
         if (t_type->scalarType()) {
           n->output()->setType(ListType::create(t_type));
+        }
+      }
+      break;
+    }
+    case ::c10::onnx::ConstantOfShape: {
+      auto shape_node = n->input(0)->node();
+      if (shape_node->kind() != ::c10::onnx::Shape) {
+        break;
+      }
+      auto orig_type = shape_node->input()->type()->cast<TensorType>();
+      auto v_type = n->output()->type()->cast<TensorType>();
+      if (v_type && !v_type->sizes().concrete_sizes()) {
+        if (orig_type && orig_type->dim()) {
+          v_type = v_type->withSymbolicShapes(orig_type->symbolic_sizes());
+          n->output()->setType(v_type);
+        }
+        if (shape_node->input()->node()->kind() == ::c10::prim::ListConstruct) {
+          v_type = v_type->withSizes({shape_node->input()->node()->inputs().size()});
+          n->output()->setType(v_type);
+        }
+      }
+      break;
+    }
+    case ::c10::onnx::Expand: {
+      auto v_type = n->output()->type()->cast<TensorType>();
+      if (v_type && !v_type->dim()) {
+        auto in1_type = n->input(0)->type()->cast<TensorType>();
+        auto in2_type = n->input(1)->type()->cast<TensorType>();
+        if (in1_type && in2_type && in1_type->dim() && in2_type->dim()) {
+          auto in1_dim = in1_type->dim().value();
+          auto in2_dim = in2_type->dim().value();
+          auto larger_dim = in1_dim > in2_dim ? in1_dim : in2_dim;
+          std::vector<c10::ShapeSymbol> sizes;
+          for (size_t i = 0; i < larger_dim; ++i) {
+            sizes.emplace_back(c10::ShapeSymbol::newSymbol());
+          }
+          v_type = v_type->withSymbolicShapes(c10::SymbolicShape(sizes));
+          n->output()->setType(v_type);
+        }
+      }
+      break;
+    }
+    case ::c10::onnx::Reshape: {
+      // Special case when shape input is not constant.
+      // onnx shape inference cannot do anything useful.
+      // However common cases are that partial info can
+      // still be set for the output shape.
+      auto v_type = n->output()->type()->cast<TensorType>();
+      if (v_type && !v_type->dim()) {
+        auto shape_node = n->input(1)->node();
+        if (shape_node->kind() == ::c10::prim::ListConstruct) {
+          // Case 1: shape input from ListConstruct, rank can be inferred.
+          // %shape = prim::ListConstruct(%1, %2, %3, %4)
+          // %out = Reshape(, %shape)
+          std::vector<c10::ShapeSymbol> sizes;
+          for (auto i : shape_node->inputs()) {
+            sizes.emplace_back(c10::ShapeSymbol::newSymbol());
+          }
+
+          v_type = v_type->withSymbolicShapes(c10::SymbolicShape(sizes));
+          n->output()->setType(v_type);
+        }
+      }
+      break;
+    }
+    case ::c10::onnx::Slice: {
+      auto v_type = n->output()->type()->cast<TensorType>();
+      if (v_type && !v_type->dim()) {
+        auto in_type = n->input(0)->type()->cast<TensorType>();
+        if (in_type && in_type->dim()) {
+          std::vector<c10::ShapeSymbol> sizes;
+          for (size_t i = 0; i < in_type->dim(); ++i) {
+            sizes.emplace_back(c10::ShapeSymbol::newSymbol());
+          }
+          v_type = v_type->withSymbolicShapes(c10::SymbolicShape(sizes));
+          n->output()->setType(v_type);
         }
       }
       break;
@@ -1257,9 +1343,11 @@ void ONNXShapeTypeInference(
 
   ScalarTypeAnalysisForONNX(n_graph);
 
-  GRAPH_DEBUG("Original torch graph: ", n->owningGraph()->toString());
-  GRAPH_DEBUG(
-      "Cloned torch graph to run shape inference: ", n_graph->toString());
+  if (n->kind() == ::c10::onnx::Transpose) {
+    GRAPH_UPDATE("Original torch graph: ", n->owningGraph()->toString());
+    GRAPH_UPDATE(
+        "Cloned torch graph to run shape inference: ", n_graph->toString());
+  }
 
   if (IsGraphValidForInference(n_graph)) {
     // TODO: Some ops have conversion happen at Peephole pass.
@@ -1293,8 +1381,11 @@ void ONNXShapeTypeInference(
         "ONNX graph after shape inference: ", prettyPrint(*model_proto));
   }
 
+  GRAPH_UPDATE("Start special post process.");
   SpecialPostProcess(n);
+  GRAPH_UPDATE("Start process constant value map.");
   ProcessConstantValueMap(n, opset_version);
+  GRAPH_UPDATE("Finish process constant value map.");
   GRAPH_DEBUG(
       "Torch graph after shape inference:", n->owningGraph()->toString());
 }

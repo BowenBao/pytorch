@@ -192,11 +192,15 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         # onnx only supports tensors, so we turn all out number types into tensors
         torch._C._jit_pass_erase_number_types(graph)
 
+        print('pre set dyn shape:', graph, input_names, dynamic_axes)
         from torch.onnx.symbolic_helper import _onnx_shape_inference
         if _onnx_shape_inference:
             input_names = [] if input_names is None else input_names
             dynamic_axes = {} if dynamic_axes is None else dynamic_axes
+            print('dyn axes:', dynamic_axes)
             torch._C._jit_pass_onnx_set_dynamic_input_shape(graph, dynamic_axes, input_names)
+        print('pre onnx: ', graph)
+        print('param dict: ', {k: v.shape for k, v in params_dict.items()})
         graph = torch._C._jit_pass_onnx(graph, operator_export_type)
         torch._C._jit_pass_lint(graph)
 
@@ -206,6 +210,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         torch._C._jit_pass_onnx_fold_if(graph)
 
         from torch.onnx.symbolic_helper import _export_onnx_opset_version
+        print(graph)
         torch._C._jit_pass_onnx_peephole(graph, _export_onnx_opset_version, fixed_batch_size)
         torch._C._jit_pass_lint(graph)
 
@@ -394,6 +399,7 @@ def _create_jit_graph(model, args, _retain_param_name):
             in_vars, in_desc = torch.jit._flatten(tuple(args) + tuple(params))
             graph = _propagate_and_assign_input_shapes(
                 method_graph, tuple(in_vars), False, False)
+            print('create jit graph 3:', graph)
         except AttributeError as e:
             raise RuntimeError('\'forward\' method must be a script method') from e
         return graph, params, torch_out, module
@@ -940,6 +946,7 @@ def _run_symbolic_function(g, block, n, inputs, env, operator_export_type=Operat
         import torch.onnx.symbolic_registry as sym_registry
 
         sym_registry.register_version('', opset_version)
+        # print('convert ', n)
 
         # Quantized op symbolics are registered for opset 9 only.
         if operator_export_type == OperatorExportTypes.ONNX_ATEN_FALLBACK and opset_version == 9:

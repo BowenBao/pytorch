@@ -851,6 +851,23 @@ static void removeSequenceSplitConcat(Block* b) {
   }
 }
 
+static void insertIdentity(Block* b) {
+  // TODO: extend to recursive call, so that if/loop fix is not needed anymore.
+  for (auto out : b->outputs()) {
+    printf("block output %s\n", out->debugName().c_str());
+    auto n = out->node();
+    if (nullptr == n || n->kind() == prim::Param) {
+      Node* id_node = b->owningGraph()->create(onnx::Identity);
+      id_node->insertBefore(b->return_node());
+      id_node->addInput(out);
+      id_node->output()->copyMetadata(out);
+      b->return_node()->replaceInputWith(out, id_node->output());
+    } else {
+      printf("block output %s owning node %s\n", out->debugName().c_str(), out->node()->kind().toQualString());
+    }
+  }
+}
+
 // This optimization does ONNX-specific peephole optimizations.
 //
 // At the moment, here are the optimizations it does:
@@ -894,6 +911,7 @@ void PeepholeOptimizeONNX(
   eraseListConstruct(graph->block(), opset_version);
   removeMaxPoolUnusedOutput(graph->block());
   removeSequenceSplitConcat(graph->block());
+  insertIdentity(graph->block());
 }
 
 } // namespace jit

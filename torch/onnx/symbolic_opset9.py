@@ -1167,6 +1167,8 @@ def __and_(g, input, other):
 def __or_(g, input, other):
     return g.op('Or', input, other)
 
+def __not_(g, input):
+    return g.op('Not', input)
 
 @wrap_logical_op_with_cast_to_and_from('Bool')
 def logical_and(g, input, other):
