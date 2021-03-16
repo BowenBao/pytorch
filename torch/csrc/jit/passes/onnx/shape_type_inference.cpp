@@ -312,6 +312,21 @@ Node* CloneNodeToGraph(
   return clone_node;
 }
 
+bool IsBlockValidForInference(Block* block) {
+  for (auto n : block->nodes()) {
+    for (auto subblock : n->blocks()) {
+      if (!IsBlockValidForInference(subblock)) {
+        return false;
+      }
+    }
+
+    if (n->kind() == ::c10::onnx::Identity) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool IsGraphValidForInference(std::shared_ptr<Graph> graph) {
   // Verify if every input has type(either Tensor or Sequence) and scalar type.
   // This is a requirement for ONNX graph inputs.
@@ -320,6 +335,7 @@ bool IsGraphValidForInference(std::shared_ptr<Graph> graph) {
       if (!t_type->scalarType().has_value()) {
         GRAPH_UPDATE(
             "Input ", in->debugName(), " is tensor type, but miss datatype.");
+        GRAPH_UPDATE("Graph: ", graph->toString());
         return false;
       }
     } else if (auto s_type = in->type()->cast<ListType>()) {
@@ -331,10 +347,12 @@ bool IsGraphValidForInference(std::shared_ptr<Graph> graph) {
       }
       GRAPH_UPDATE(
           "Input ", in->debugName(), " is sequence type, but miss datatype.");
+      GRAPH_UPDATE("Graph: ", graph->toString());
       return false;
     }
   }
-  return true;
+
+  return IsBlockValidForInference(graph->block());
 }
 
 void ConvertGraphToONNXProto(
@@ -1130,33 +1148,146 @@ void ProcessConstantValueMap(Node* n, int opset_version) {
 // Any additional post process that are specific to individual node kind.
 void SpecialPostProcess(Node* n) {
   switch (n->kind()) {
-    case ::c10::onnx::If: {
-      if (!IsBlockReturnTypeSame(n) && IsStaticConditionONNX(n)) {
-        auto cond = ConditionValueONNX(n);
-        auto block_idx = cond ? 0 : 1;
-        for (size_t i = 0; i < n->outputs().size(); i++) {
-          n->outputs()[i]->setType(
-              n->blocks()[block_idx]->outputs()[i]->type());
-        }
-      }
-      break;
-    }
     case ::c10::onnx::SequenceInsert: {
       // Special case when input sequence to SequenceInsert is empty.
       // onnx Sequence type requires element type to be set.
       // If the list to insert is empty, we set the elem type by
       // looking at the tensor being inserted.
+
+      // TODO: If created by empty sequence outside of loop, but passed on later with updates of non-float type.
       auto list_node = n->input(0)->node();
       auto t_node = n->input(1)->node();
-      if (!list_node || list_node->kind() != prim::ListConstruct ||
-          list_node->inputs().size() != 0) {
-        break;
+
+      if (list_node && list_node->kind() == prim::ListConstruct && list_node->inputs().size() != 0) {
+        // early graph state where input of prim::ListConstruct is not yet converted to onnx::SequenceEmpty
+        if (TensorTypePtr t_type = n->input(1)->type()->cast<TensorType>()) {
+          if (t_type->scalarType()) {
+            n->output()->setType(ListType::create(t_type));
+          }
+        }
+      } else if (list_node && list_node->kind() == ::c10::onnx::SequenceEmpty) {
+        // TODO: not very likely, seems to have been converted to onnx::SequenceConstruct directly.
+        //       Maybe from if operator.
+        printf("insert to empty sequence.\n");
+      } else if (list_node && list_node->kind() == prim::Param) {
+
+        auto find_outer_input = [](Value* inner_input, TensorTypePtr t_type) -> Node* {
+          auto find_outer_input_impl = [](Value* inner_input, TensorTypePtr t_type, auto& find_outer_input_ref) -> Node* {
+            auto list_node = inner_input->node();
+            if (!list_node || list_node->kind() != prim::Param) {
+              return nullptr;
+            }
+
+            auto loop_n = list_node->owningBlock()->owningNode();
+            if (nullptr == loop_n || loop_n->kind() != ::c10::onnx::Loop) {
+              return nullptr;
+            }
+
+            size_t in_idx = 0;
+            for (; in_idx < list_node->outputs().size(); ++in_idx) {
+              if (list_node->output(in_idx) == inner_input) {
+                break;
+              }
+            }
+            TORCH_INTERNAL_ASSERT(in_idx < list_node->outputs().size() && in_idx < loop_n->inputs().size());
+            auto seq_empty_n = loop_n->input(in_idx)->node();
+
+            if (seq_empty_n && seq_empty_n->kind() == ::c10::onnx::SequenceEmpty) {
+              // update seq empty.
+              TORCH_INTERNAL_ASSERT(t_type->scalarType().has_value());
+              auto scalar_type = t_type->scalarType().value();
+              auto onnx_type = ATenTypeToOnnxType(scalar_type);
+              seq_empty_n->i_(attr::dtype, onnx_type);
+              seq_empty_n->output()->setType(ListType::create(t_type));
+              inner_input->setType(ListType::create(t_type));
+              return seq_empty_n;
+            } else {
+              auto found_n = find_outer_input_ref(loop_n->input(in_idx), t_type, find_outer_input_ref);
+              if (nullptr != found_n) {
+                // update this part.
+                inner_input->setType(ListType::create(t_type));
+              }
+              return found_n;
+            }
+          };
+          return find_outer_input_impl(inner_input, t_type, find_outer_input_impl);
+        };
+
+        if (TensorTypePtr t_type = n->input(1)->type()->cast<TensorType>()) {
+          if (t_type->scalarType()) {
+            // Check if insertion dtype is not the same with sequence empty dtype.
+            auto seq_empty_n = find_outer_input(n->input(0), t_type);
+            if (nullptr != seq_empty_n) {
+              n->output()->setType(ListType::create(t_type));
+            }
+          }
+        }
+
+        printf("insert to empty sequence from within loop.\n");
+      }
+      break;
+    }
+    case ::c10::onnx::Cast: {
+      // ONNX shape inference is not able to assign output tensor shape,
+      // when input to onnx::Cast has incomplete tensor shape, for instance
+      // missing shape, rank, dtype, etc. This postprocess sets the correct
+      // dtype for output tensor, since the dtype info lies in Cast attribute.
+      TensorTypePtr t_type = n->output()->type()->cast<TensorType>();
+      if (nullptr != t_type && !t_type->scalarType().has_value()) {
+        auto onnx_dtype = n->i(attr::to);
+        auto aten_dtype = ONNXTypeToATenType(onnx_dtype);
+        n->output()->setType(t_type->withScalarType(aten_dtype));
+      }
+      break;
+    }
+    case ::c10::onnx::ConstantOfShape: {
+      auto shape_node = n->input(0)->node();
+      if (shape_node->kind() == ::c10::onnx::Shape) {
+        // shape -> ConstantOfShape
+        auto orig_type = shape_node->input()->type()->cast<TensorType>();
+        auto v_type = n->output()->type()->cast<TensorType>();
+        if (v_type && !v_type->sizes().concrete_sizes()) {
+          if (orig_type && orig_type->dim()) {
+            v_type = v_type->withSymbolicShapes(orig_type->symbolic_sizes());
+            n->output()->setType(v_type);
+          }
+          if (shape_node->input()->node()->kind() == ::c10::prim::ListConstruct) {
+            v_type = v_type->withSizes({shape_node->input()->node()->inputs().size()});
+            n->output()->setType(v_type);
+          }
+        }
+      } else if (shape_node->kind() == ::c10::prim::ListConstruct) {
+        // ListConstruct -> ConstantOfShape
+        auto v_type = n->output()->type()->cast<TensorType>();
+        if (v_type && !v_type->sizes().concrete_sizes()) {
+          auto value = n->t(attr::value);
+          v_type = v_type->withScalarType(value.scalar_type());
+          std::vector<c10::ShapeSymbol> sizes;
+          for (auto i : shape_node->inputs()) {
+            sizes.emplace_back(c10::ShapeSymbol::newSymbol());
+          }
+          v_type = v_type->withSymbolicShapes(c10::SymbolicShape(sizes));
+          n->output()->setType(v_type);
+        }
       }
 
-      if (TensorTypePtr t_type = n->input(1)->type()->cast<TensorType>()) {
-        if (t_type->scalarType()) {
-          n->output()->setType(ListType::create(t_type));
-        }
+      break;
+    }
+    case ::c10::onnx::Identity: {
+      n->output()->setType(n->input()->type());
+      break;
+    }
+    case ::c10::onnx::If: {
+      // TODO: fix node output metadata based on block output metadata.
+      for (size_t i = 0; i < n->outputs().size(); ++i) {
+        n->output(i)->setType(n->blocks().at(0)->outputs().at(i)->type());
+      }
+      break;
+    }
+    case ::c10::onnx::Loop: {
+      // TODO: fix node output metadata based on block output metadata.
+      for (size_t i = 0; i < n->outputs().size(); ++i) {
+        n->output(i)->setType(n->blocks().at(0)->outputs().at(i + 1)->type());
       }
       break;
     }
@@ -1278,7 +1409,7 @@ void ONNXShapeTypeInference(
     } catch (std::runtime_error& ex) {
       // TODO: include this as warning once we have a more consolidated warning
       // system.
-      GRAPH_DEBUG(
+      GRAPH_UPDATE(
           "ONNX shape inference fails with: ",
           ex.what(),
           " on graph: ",
@@ -1286,7 +1417,8 @@ void ONNXShapeTypeInference(
       const char shape_err[] = "ShapeInferenceError";
       const char type_err[] = "TypeInferenceError";
       if ((strstr(ex.what(), shape_err) == NULL) &&
-          (strstr(ex.what(), type_err) == NULL))
+          (strstr(ex.what(), type_err) == NULL) &&
+          (n->kind() != ::c10::onnx::Identity))
         throw;
     }
     GRAPH_DEBUG(

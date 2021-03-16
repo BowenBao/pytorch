@@ -539,8 +539,8 @@ def transpose(g, self, dim0, dim1):
         if sym_help._operator_export_type == torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK:
             return g.op("ATen", self, operator_s="transpose", dim0_i=dim0, dim1_i=dim1)
         else:
-            raise RuntimeError('Unsupported: ONNX export of transpose for tensor '
-                               'of unknown rank.')
+            raise RuntimeError('Unsupported: ONNX export of transpose for tensor {}'
+                               'of unknown rank. Graph: {}'.format(self, g))
 
 
 @parse_args('v', 'is')
@@ -1111,6 +1111,10 @@ def wrap_logical_op_with_negation(func):
     return wrap_with_not
 
 
+def __not_(g, self):
+    return g.op("Not", self)
+
+
 def eq(g, self, other):
     return g.op("Equal", self, other)
 
@@ -1459,10 +1463,21 @@ def index_select(g, self, dim, index):
 
 
 def index_put(g, self, indices_list_value, values, accumulate):
-    if sym_help._operator_export_type == torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK:
+    if sym_help._is_packed_list(indices_list_value):
         indices_list = sym_help._unpack_list(indices_list_value)
+    else:
+        indices_list = [indices_list_value]
+    if sym_help._operator_export_type == torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK:
         args = [self] + indices_list + [values, accumulate]
         return g.op("ATen", *args, operator_s='index_put')
+
+    accumulate = sym_help._parse_arg(accumulate, 'b')
+
+    if len(indices_list) == 0:
+        if accumulate:
+            return add(g, self, values)
+        else:
+            return values
     else:
         sym_help._onnx_opset_unsupported('index_put', 9, 11)
 
@@ -1487,6 +1502,12 @@ def index_copy(g, self, dim, index, source):
     return scatter(g, self, dim, expanded_index, source)
 
 
+def fill(g, self, value):
+    self_dtype = sym_help._try_get_scalar_type(self)
+    dtype = sym_help.scalar_type_to_onnx.index(sym_help.cast_pytorch_to_onnx[self_dtype])
+    return full_like(g, self, value, dtype)
+
+
 def type_as(g, self, other):
     self_dtype = sym_help._try_get_scalar_type(self)
     other_dtype = sym_help._try_get_scalar_type(other)
@@ -1500,7 +1521,7 @@ def type_as(g, self, other):
             return g.op("ATen", self, other, operator_s="type_as")
         else:
             raise RuntimeError('Unsupported: ONNX export of type_as for tensor '
-                               'of unknown dtype.')
+                               'of unknown dtype. Input: {}, other: {}'.format(self, other))
 
 
 @parse_args('v', 'v', 'i', 'f')
@@ -1594,6 +1615,21 @@ def min(g, self, dim_or_y=None, keepdim=None):
         min = g.op("ReduceMin", self, axes_i=[dim], keepdims_i=keepdim)
         indices = g.op('ArgMin', self, axis_i=dim, keepdims_i=keepdim)
         return min, indices
+
+
+def prim_min(g, self, other=None):
+    if other is None:
+        ten = stack(g, self, g.op("Constant", value_t=torch.tensor([0])))
+        return min(g, ten)
+    else:
+        dim = 0
+        unsqueezed = [sym_help._unsqueeze_helper(g, t, [dim]) for t in [self, other]]
+        ten = g.op("Concat", *unsqueezed, axis_i=dim)
+        return min(g, ten)
+
+
+def item(g, self):
+    return self
 
 
 def exp(g, self):
@@ -1781,8 +1817,10 @@ def full(g, sizes, value, dtype, layout, device, pin_memory=False):
 def full_like(g, input, fill_value, dtype=None, layout=None, device=None, pin_memory=False, memory_format=None):
     fill_value = sym_help._maybe_get_const(fill_value, 'f')
     if sym_help._is_value(fill_value):
+        dtype = None if dtype.node().mustBeNone() else dtype
         dtype = 6 if dtype is None else dtype
         tmp = zeros_like(g, input, dtype, layout, device)
+        fill_value = g.op("Cast", fill_value, to_i=sym_help.scalar_type_to_onnx[dtype])
         return add(g, tmp, fill_value, g.op("Constant", value_t=torch.tensor(1)))
     else:
         dtype = sym_help._get_const(dtype, 'i', 'dtype')
@@ -1931,6 +1969,9 @@ def to(g, self, *args):
             if sym_help._is_value(dtype):
                 # aten::to(Tensor, Tensor, bool, bool, memory_format)
                 other = args[0]
+                # TODO: workaround casting device
+                if other.type().kind() == 'DeviceObjType':
+                    return self
                 dtype = other.type().scalarType()
                 return g.op("Cast", self, to_i=sym_help.cast_pytorch_to_onnx[dtype])
             else:

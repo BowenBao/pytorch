@@ -203,7 +203,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         torch._C._jit_pass_onnx_scalar_type_analysis(graph)
         torch._C._jit_pass_lint(graph)
 
-        torch._C._jit_pass_onnx_fold_if(graph)
+        # torch._C._jit_pass_onnx_fold_if(graph)
 
         from torch.onnx.symbolic_helper import _export_onnx_opset_version
         torch._C._jit_pass_onnx_peephole(graph, _export_onnx_opset_version, fixed_batch_size)
@@ -685,7 +685,6 @@ def _export(model, args, f, export_params=True, verbose=False, training=None,
             defer_weight_export = export_type is not ExportTypes.PROTOBUF_FILE
             if custom_opsets is None:
                 custom_opsets = {}
-
             if export_params:
                 proto, export_map = graph._export_onnx(
                     params_dict, opset_version, dynamic_axes, defer_weight_export,
