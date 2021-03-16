@@ -7096,7 +7096,6 @@ class TestONNXRuntime(unittest.TestCase):
                 self.conv.weight = weight
                 w = torch.softmax(self.conv.weight, dim=0)
                 self.conv.weight = w + w
-                # self.b = True
                 if self.b:
                     return box_regression + self.conv.weight
                 else:
