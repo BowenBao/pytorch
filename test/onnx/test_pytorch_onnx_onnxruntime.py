@@ -1339,6 +1339,74 @@ class TestONNXRuntime(unittest.TestCase):
         x = torch.randn(2, 3, 4)
         self.run_test(ArithmeticModule(), x)
 
+    def test_arithmetic_prim_long(self):
+        class ArithmeticModule(torch.nn.Module):
+            def forward(self, x, y: int):
+                x = x + y
+                x = x - y
+                x = x * (y * 3)
+                x = x / (y * 4)
+                return x
+
+        x = torch.randn(2, 3, 4)
+        y = 2
+        self.run_test(ArithmeticModule(), (x, y))
+
+        class ArithmeticModule(torch.nn.Module):
+            def forward(self, x):
+                x = x + 2
+                x = x - 3
+                return x.shape[0]
+
+        x = torch.randn(2, 3, 4)
+        self.run_test(ArithmeticModule(), x)
+
+    def test_arithmetic_prim_float(self):
+        class ArithmeticModule(torch.nn.Module):
+            def forward(self, x, y: float):
+                x = x + y
+                x = x - y
+                x = x * (y * 3)
+                x = x / (y * 4)
+                return x
+
+        x = torch.randn(2, 3, 4)
+        y = 2.5
+        self.run_test(ArithmeticModule(), (x, y))
+
+        class ArithmeticModule(torch.nn.Module):
+            def forward(self, x):
+                x = x + 2
+                x = x - 3
+                return x.shape[1] / 2
+
+        x = torch.randn(2, 3, 4)
+        self.run_test(ArithmeticModule(), x)
+
+    def test_arithmetic_prim_bool(self):
+        class ArithmeticModule(torch.nn.Module):
+            def forward(self, x, y: int, z: bool, t: float):
+                x = x + y
+                x = x - y
+                if z:
+                    x = x * (y * 3)
+                    x = x / (y * 4)
+                return x / t, z
+
+        x = torch.randn(2, 3, 4)
+        y = 2
+        z = False
+        t = 2.5
+        self.run_test(ArithmeticModule(), (x, y, z, t))
+
+        class ArithmeticModule(torch.nn.Module):
+            def forward(self, x: float, y: float):
+                return x == y
+
+        x = 3
+        y = 2
+        self.run_test(ArithmeticModule(), (x, y))
+
     # In scripting the first transpose node do not carry shape and dtype info.
     # The following test only works when onnx shape inference is enabled.
     @skipIfONNXShapeInference(False)
@@ -6084,10 +6152,59 @@ class TestONNXRuntime(unittest.TestCase):
                 return torch.nn.functional.embedding(input, emb, padding_idx=1)
 
         model = EmbedModel()
-        x = torch.randint(4, (4, ))
+        x = torch.randint(4, (4,))
         x[2] = x[0] = 1
         embedding_matrix = torch.rand(10, 3)
         self.run_test(model, (x, embedding_matrix))
+
+        x = torch.randint(4, (4, 3, 2))
+        x[2] = 1
+        x[0][1] = 1
+        self.run_test(model, (x, embedding_matrix))
+        self.run_test(model, (x, embedding_matrix), training=torch.onnx.TrainingMode.TRAINING)
+
+        class EmbedModelWithoutPaddingIdx(torch.nn.Module):
+            def forward(self, input, emb):
+                return torch.nn.functional.embedding(input, emb)
+
+        model = EmbedModelWithoutPaddingIdx()
+        x = torch.randint(4, (4, 3, 2))
+        self.run_test(model, (x, embedding_matrix))
+
+    @skipIfUnsupportedMinOpsetVersion(9)
+    def test_embedding_module(self):
+        class EmbedModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.emb = torch.nn.Embedding(4, 3, padding_idx=1)
+                self.emb2 = torch.nn.Embedding(4, 3, padding_idx=1)
+                with torch.no_grad():
+                    self.emb2.weight[1] = torch.ones(3)
+
+            def forward(self, input):
+                return self.emb(input), self.emb2(input)
+
+        model = EmbedModel()
+        x = torch.randint(4, (4,))
+        x[2] = x[0] = 1
+        self.run_test(model, (x,))
+
+        x = torch.randint(4, (4, 3, 2))
+        x[2] = 1
+        x[0][1] = 1
+        self.run_test(model, (x,))
+
+        class EmbedModelWithoutPaddingIdx(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.emb = torch.nn.Embedding(4, 3)
+
+            def forward(self, input):
+                return self.emb(input)
+
+        model = EmbedModelWithoutPaddingIdx()
+        x = torch.randint(4, (4, 3, 2))
+        self.run_test(model, (x,))
 
     def _dispatch_rnn_test(self, name, *args, **kwargs):
         if name == 'elman':
@@ -6884,6 +7001,7 @@ class TestONNXRuntime(unittest.TestCase):
                 super().__init__()
                 self.weights = InnerModule2.get_embedding(embedding_dim)
                 self.register_buffer("_float_tensor", torch.FloatTensor(1))
+                self.const = 2
 
             @staticmethod
             def get_embedding(embedding_dim: int):
@@ -6893,9 +7011,11 @@ class TestONNXRuntime(unittest.TestCase):
 
             def forward(self, input, incremental_state: Optional[torch.Tensor] = None):
                 bsz, seq_len = input.shape[0], input.shape[1]
+                self.const = 3
                 if self.weights is None:
                     self.weights = InnerModule.get_embedding(self.embedding_dim)
                 self.weights = self.weights.to(self._float_tensor)
+                self.weights = self.weights * self.const
                 if incremental_state is not None:
                     pos = seq_len
                     return self.weights[1 + pos, :].expand(bsz, 1, -1)
@@ -6935,6 +7055,7 @@ class TestONNXRuntime(unittest.TestCase):
             def __init__(self, embedding_dim):
                 super().__init__()
                 self.embedding_dim = embedding_dim
+                self.const = 2.5
                 self.weights = InnerModule.get_embedding(self.embedding_dim)
                 self.register_buffer("_float_tensor", torch.FloatTensor(1))
 
@@ -6946,10 +7067,11 @@ class TestONNXRuntime(unittest.TestCase):
 
             def forward(self, input, incremental_state: Optional[torch.Tensor] = None):
                 bsz, seq_len = input.shape[0], input.shape[1]
+                self.const = 1.5
                 self.weights = InnerModule.get_embedding(self.embedding_dim)
                 return (
                     self.weights.index_select(0, torch.ones((bsz * seq_len), dtype=torch.int64)).view(bsz, seq_len, -1)
-                )
+                ) * self.const
 
         class Module(torch.nn.Module):
             def __init__(self):
@@ -6967,12 +7089,18 @@ class TestONNXRuntime(unittest.TestCase):
             def __init__(self):
                 super(MyModule, self).__init__()
                 self.conv = torch.nn.Conv1d(3, 10, 2)
+                self.b = False
 
             def forward(self, box_regression, weight):
+                self.b = True
                 self.conv.weight = weight
                 w = torch.softmax(self.conv.weight, dim=0)
                 self.conv.weight = w + w
-                return box_regression + self.conv.weight
+                # self.b = True
+                if self.b:
+                    return box_regression + self.conv.weight
+                else:
+                    return box_regression - self.conv.weight
 
         model = torch.jit.script(MyModule())
         weight = torch.ones(3, 2)
