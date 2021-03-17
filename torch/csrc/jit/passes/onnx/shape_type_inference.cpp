@@ -1170,82 +1170,82 @@ void SpecialPostProcess(Node* n) {
       }
       break;
     }
-    case ::c10::onnx::ConstantOfShape: {
-      auto shape_node = n->input(0)->node();
-      if (shape_node->kind() != ::c10::onnx::Shape) {
-        break;
-      }
-      auto orig_type = shape_node->input()->type()->cast<TensorType>();
-      auto v_type = n->output()->type()->cast<TensorType>();
-      if (v_type && !v_type->sizes().concrete_sizes()) {
-        if (orig_type && orig_type->dim()) {
-          v_type = v_type->withSymbolicShapes(orig_type->symbolic_sizes());
-          n->output()->setType(v_type);
-        }
-        if (shape_node->input()->node()->kind() == ::c10::prim::ListConstruct) {
-          v_type = v_type->withSizes({shape_node->input()->node()->inputs().size()});
-          n->output()->setType(v_type);
-        }
-      }
-      break;
-    }
-    case ::c10::onnx::Expand: {
-      auto v_type = n->output()->type()->cast<TensorType>();
-      if (v_type && !v_type->dim()) {
-        auto in1_type = n->input(0)->type()->cast<TensorType>();
-        auto in2_type = n->input(1)->type()->cast<TensorType>();
-        if (in1_type && in2_type && in1_type->dim() && in2_type->dim()) {
-          auto in1_dim = in1_type->dim().value();
-          auto in2_dim = in2_type->dim().value();
-          auto larger_dim = in1_dim > in2_dim ? in1_dim : in2_dim;
-          std::vector<c10::ShapeSymbol> sizes;
-          for (size_t i = 0; i < larger_dim; ++i) {
-            sizes.emplace_back(c10::ShapeSymbol::newSymbol());
-          }
-          v_type = v_type->withSymbolicShapes(c10::SymbolicShape(sizes));
-          n->output()->setType(v_type);
-        }
-      }
-      break;
-    }
-    case ::c10::onnx::Reshape: {
-      // Special case when shape input is not constant.
-      // onnx shape inference cannot do anything useful.
-      // However common cases are that partial info can
-      // still be set for the output shape.
-      auto v_type = n->output()->type()->cast<TensorType>();
-      if (v_type && !v_type->dim()) {
-        auto shape_node = n->input(1)->node();
-        if (shape_node->kind() == ::c10::prim::ListConstruct) {
-          // Case 1: shape input from ListConstruct, rank can be inferred.
-          // %shape = prim::ListConstruct(%1, %2, %3, %4)
-          // %out = Reshape(, %shape)
-          std::vector<c10::ShapeSymbol> sizes;
-          for (auto i : shape_node->inputs()) {
-            sizes.emplace_back(c10::ShapeSymbol::newSymbol());
-          }
+    // case ::c10::onnx::ConstantOfShape: {
+    //   auto shape_node = n->input(0)->node();
+    //   if (shape_node->kind() != ::c10::onnx::Shape) {
+    //     break;
+    //   }
+    //   auto orig_type = shape_node->input()->type()->cast<TensorType>();
+    //   auto v_type = n->output()->type()->cast<TensorType>();
+    //   if (v_type && !v_type->sizes().concrete_sizes()) {
+    //     if (orig_type && orig_type->dim()) {
+    //       v_type = v_type->withSymbolicShapes(orig_type->symbolic_sizes());
+    //       n->output()->setType(v_type);
+    //     }
+    //     if (shape_node->input()->node()->kind() == ::c10::prim::ListConstruct) {
+    //       v_type = v_type->withSizes({shape_node->input()->node()->inputs().size()});
+    //       n->output()->setType(v_type);
+    //     }
+    //   }
+    //   break;
+    // }
+    // case ::c10::onnx::Expand: {
+    //   auto v_type = n->output()->type()->cast<TensorType>();
+    //   if (v_type && !v_type->dim()) {
+    //     auto in1_type = n->input(0)->type()->cast<TensorType>();
+    //     auto in2_type = n->input(1)->type()->cast<TensorType>();
+    //     if (in1_type && in2_type && in1_type->dim() && in2_type->dim()) {
+    //       auto in1_dim = in1_type->dim().value();
+    //       auto in2_dim = in2_type->dim().value();
+    //       auto larger_dim = in1_dim > in2_dim ? in1_dim : in2_dim;
+    //       std::vector<c10::ShapeSymbol> sizes;
+    //       for (size_t i = 0; i < larger_dim; ++i) {
+    //         sizes.emplace_back(c10::ShapeSymbol::newSymbol());
+    //       }
+    //       v_type = v_type->withSymbolicShapes(c10::SymbolicShape(sizes));
+    //       n->output()->setType(v_type);
+    //     }
+    //   }
+    //   break;
+    // }
+    // case ::c10::onnx::Reshape: {
+    //   // Special case when shape input is not constant.
+    //   // onnx shape inference cannot do anything useful.
+    //   // However common cases are that partial info can
+    //   // still be set for the output shape.
+    //   auto v_type = n->output()->type()->cast<TensorType>();
+    //   if (v_type && !v_type->dim()) {
+    //     auto shape_node = n->input(1)->node();
+    //     if (shape_node->kind() == ::c10::prim::ListConstruct) {
+    //       // Case 1: shape input from ListConstruct, rank can be inferred.
+    //       // %shape = prim::ListConstruct(%1, %2, %3, %4)
+    //       // %out = Reshape(, %shape)
+    //       std::vector<c10::ShapeSymbol> sizes;
+    //       for (auto i : shape_node->inputs()) {
+    //         sizes.emplace_back(c10::ShapeSymbol::newSymbol());
+    //       }
 
-          v_type = v_type->withSymbolicShapes(c10::SymbolicShape(sizes));
-          n->output()->setType(v_type);
-        }
-      }
-      break;
-    }
-    case ::c10::onnx::Slice: {
-      auto v_type = n->output()->type()->cast<TensorType>();
-      if (v_type && !v_type->dim()) {
-        auto in_type = n->input(0)->type()->cast<TensorType>();
-        if (in_type && in_type->dim()) {
-          std::vector<c10::ShapeSymbol> sizes;
-          for (size_t i = 0; i < in_type->dim(); ++i) {
-            sizes.emplace_back(c10::ShapeSymbol::newSymbol());
-          }
-          v_type = v_type->withSymbolicShapes(c10::SymbolicShape(sizes));
-          n->output()->setType(v_type);
-        }
-      }
-      break;
-    }
+    //       v_type = v_type->withSymbolicShapes(c10::SymbolicShape(sizes));
+    //       n->output()->setType(v_type);
+    //     }
+    //   }
+    //   break;
+    // }
+    // case ::c10::onnx::Slice: {
+    //   auto v_type = n->output()->type()->cast<TensorType>();
+    //   if (v_type && !v_type->dim()) {
+    //     auto in_type = n->input(0)->type()->cast<TensorType>();
+    //     if (in_type && in_type->dim()) {
+    //       std::vector<c10::ShapeSymbol> sizes;
+    //       for (size_t i = 0; i < in_type->dim(); ++i) {
+    //         sizes.emplace_back(c10::ShapeSymbol::newSymbol());
+    //       }
+    //       v_type = v_type->withSymbolicShapes(c10::SymbolicShape(sizes));
+    //       n->output()->setType(v_type);
+    //     }
+    //   }
+    //   break;
+    // }
   }
 }
 
@@ -1366,7 +1366,7 @@ void ONNXShapeTypeInference(
     } catch (std::runtime_error& ex) {
       // TODO: include this as warning once we have a more consolidated warning
       // system.
-      GRAPH_DEBUG(
+      GRAPH_UPDATE(
           "ONNX shape inference fails with: ",
           ex.what(),
           " on graph: ",

@@ -342,6 +342,29 @@ void ONNXFixupUninitializedOutput(Node* node) {
           graph, else_block, else_block_output, then_block_output);
       if_node->outputs()[i]->setType(else_block->outputs()[i]->type());
     }
+    auto then_tensor_type =
+        then_block->outputs().at(i)->type()->castRaw<TensorType>();
+    auto else_tensor_type =
+        else_block->outputs().at(i)->type()->castRaw<TensorType>();
+    if (then_tensor_type && else_tensor_type) {
+      auto then_shape = then_tensor_type->symbolic_sizes();
+      auto else_shape = else_tensor_type->symbolic_sizes();
+      std::vector<::c10::ShapeSymbol> dims;
+      if (then_shape.rank() && else_shape.rank()) {
+        TORCH_CHECK(
+            then_shape.rank() == else_shape.rank(),
+            "Cannot export If operator that produce tensor of different rank between then branch and else branch.");
+        for (auto j = 0; j < then_shape.rank().value(); ++j) {
+          if (then_shape[j] == else_shape[j]) {
+            dims.emplace_back(then_shape[j]);
+          } else {
+            dims.emplace_back(::c10::ShapeSymbol::newSymbol());
+          }
+        }
+        if_node->output(i)->setType(
+            then_tensor_type->withSymbolicShapes(::c10::SymbolicShape(dims)));
+      }
+    }
   }
 }
 

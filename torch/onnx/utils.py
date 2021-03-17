@@ -210,7 +210,6 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         torch._C._jit_pass_onnx_fold_if(graph)
 
         from torch.onnx.symbolic_helper import _export_onnx_opset_version
-        print(graph)
         torch._C._jit_pass_onnx_peephole(graph, _export_onnx_opset_version, fixed_batch_size)
         torch._C._jit_pass_lint(graph)
 
@@ -393,13 +392,15 @@ def _create_jit_graph(model, args, _retain_param_name):
             graph = model.forward.graph
             torch._C._jit_pass_onnx_function_substitution(graph)
             freezed_m = torch._C._freeze_module(model._c, preserveParameters=True)
+            print('create jit graph 2:', freezed_m._get_method('forward').graph)
             module, params = torch._C._jit_onnx_list_model_parameters(freezed_m)
             method_graph = module._get_method('forward').graph
+            print('create jit graph 3:', method_graph)
 
             in_vars, in_desc = torch.jit._flatten(tuple(args) + tuple(params))
             graph = _propagate_and_assign_input_shapes(
                 method_graph, tuple(in_vars), False, False)
-            print('create jit graph 3:', graph)
+            print('create jit graph 4:', graph)
         except AttributeError as e:
             raise RuntimeError('\'forward\' method must be a script method') from e
         return graph, params, torch_out, module

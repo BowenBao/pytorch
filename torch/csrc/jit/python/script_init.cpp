@@ -422,7 +422,7 @@ static TypePtr getTensorType(const at::Tensor& t, bool complete) {
 }
 
 static TupleTypePtr getTupleTensorType(
-    const Stack::const_iterator& s_iter,
+    Stack::const_iterator& s_iter,
     const Stack::const_iterator& s_iter_end,
     const TypePtr& tupleType,
     bool complete) {
@@ -433,15 +433,17 @@ static TupleTypePtr getTupleTensorType(
   for (const auto& subType : tupleType->containedTypes()) {
     if (subType->kind() == TupleType::Kind) {
       types.push_back(
-          getTupleTensorType(s_iter + 1, s_iter_end, subType, complete));
+          getTupleTensorType(s_iter, s_iter_end, subType, complete));
     } else {
       types.push_back(getTensorType(s_iter->toTensor(), complete));
+      s_iter++;
     }
   }
   return TupleType::create(types);
 }
 
 static void setInputTensorTypes(Graph& g, const Stack& stack, bool complete) {
+  printf("Set input tensor type\n");
   at::ArrayRef<Value*> input_values = g.inputs();
   auto s_iter = stack.begin();
   for (auto v : input_values) {
@@ -457,6 +459,7 @@ static void setInputTensorTypes(Graph& g, const Stack& stack, bool complete) {
         }
       }
     }
+    printf("input type kind: %s tag %d\n", v->type()->str().c_str(), int(v->type()->kind()));
     if (v->type()->kind() == TupleType::Kind) {
       AT_ASSERT(v->node()->kind() == prim::Param);
       v->setType(getTupleTensorType(s_iter, stack.end(), v->type(), complete));
