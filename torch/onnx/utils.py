@@ -161,7 +161,9 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         # until the point where it is unpacked by listUnpack node.
         # This pass does a preprocess, and prepares the nodes such that enough context can be received
         # by the symbolic function.
+        # print('pre remove inplace ops:', graph)
         torch._C._jit_pass_onnx_remove_inplace_ops_for_onnx(graph, module)
+        # print('after remove inplace ops:', graph)
         torch._C._jit_pass_onnx_preprocess(graph)
 
         # onnx does not support tuples, so try to remove them
@@ -171,6 +173,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         torch._C._jit_pass_prepare_division_for_onnx(graph)
 
         torch._C._jit_pass_onnx_remove_print(graph)
+        # print('pre caffe2:', graph)
         torch._C._jit_pass_onnx_preprocess_caffe2(graph)
 
         if operator_export_type == OperatorExportTypes.ONNX_ATEN_FALLBACK:
@@ -192,15 +195,11 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
         # onnx only supports tensors, so we turn all out number types into tensors
         torch._C._jit_pass_erase_number_types(graph)
 
-        print('pre set dyn shape:', graph, input_names, dynamic_axes)
         from torch.onnx.symbolic_helper import _onnx_shape_inference
         if _onnx_shape_inference:
             input_names = [] if input_names is None else input_names
             dynamic_axes = {} if dynamic_axes is None else dynamic_axes
-            print('dyn axes:', dynamic_axes)
             torch._C._jit_pass_onnx_set_dynamic_input_shape(graph, dynamic_axes, input_names)
-        print('pre onnx: ', graph)
-        print('param dict: ', {k: v.shape for k, v in params_dict.items()})
         graph = torch._C._jit_pass_onnx(graph, operator_export_type)
         torch._C._jit_pass_lint(graph)
 
@@ -225,6 +224,7 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
     from torch.onnx.symbolic_helper import _onnx_shape_inference, _export_onnx_opset_version
     if _onnx_shape_inference:
         torch._C._jit_pass_onnx_graph_shape_type_inference(graph, params_dict, _export_onnx_opset_version)
+    print(graph)
     return graph
 
 
@@ -392,15 +392,12 @@ def _create_jit_graph(model, args, _retain_param_name):
             graph = model.forward.graph
             torch._C._jit_pass_onnx_function_substitution(graph)
             freezed_m = torch._C._freeze_module(model._c, preserveParameters=True)
-            print('create jit graph 2:', freezed_m._get_method('forward').graph)
             module, params = torch._C._jit_onnx_list_model_parameters(freezed_m)
             method_graph = module._get_method('forward').graph
-            print('create jit graph 3:', method_graph)
 
             in_vars, in_desc = torch.jit._flatten(tuple(args) + tuple(params))
             graph = _propagate_and_assign_input_shapes(
                 method_graph, tuple(in_vars), False, False)
-            print('create jit graph 4:', graph)
         except AttributeError as e:
             raise RuntimeError('\'forward\' method must be a script method') from e
         return graph, params, torch_out, module
@@ -947,7 +944,6 @@ def _run_symbolic_function(g, block, n, inputs, env, operator_export_type=Operat
         import torch.onnx.symbolic_registry as sym_registry
 
         sym_registry.register_version('', opset_version)
-        # print('convert ', n)
 
         # Quantized op symbolics are registered for opset 9 only.
         if operator_export_type == OperatorExportTypes.ONNX_ATEN_FALLBACK and opset_version == 9:

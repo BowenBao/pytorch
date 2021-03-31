@@ -854,7 +854,6 @@ static void removeSequenceSplitConcat(Block* b) {
 static void insertIdentity(Block* b) {
   // TODO: extend to recursive call, so that if/loop fix is not needed anymore.
   for (auto out : b->outputs()) {
-    printf("block output %s\n", out->debugName().c_str());
     auto n = out->node();
     if (nullptr == n || n->kind() == prim::Param) {
       Node* id_node = b->owningGraph()->create(onnx::Identity);
@@ -862,8 +861,6 @@ static void insertIdentity(Block* b) {
       id_node->addInput(out);
       id_node->output()->copyMetadata(out);
       b->return_node()->replaceInputWith(out, id_node->output());
-    } else {
-      printf("block output %s owning node %s\n", out->debugName().c_str(), out->node()->kind().toQualString());
     }
   }
 }

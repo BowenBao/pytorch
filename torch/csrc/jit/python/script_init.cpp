@@ -421,29 +421,46 @@ static TypePtr getTensorType(const at::Tensor& t, bool complete) {
   return r;
 }
 
+static TypePtr inferShapeAndTypeForInput(
+    TypePtr input_type,
+    Stack::const_iterator& s_iter,
+    const Stack::const_iterator& s_iter_end,
+    bool complete);
+
 static TupleTypePtr getTupleTensorType(
     Stack::const_iterator& s_iter,
     const Stack::const_iterator& s_iter_end,
     const TypePtr& tupleType,
     bool complete) {
-  AT_ASSERT(tupleType->kind() == TupleType::Kind);
-  AT_ASSERT(s_iter != s_iter_end);
-
+  TORCH_INTERNAL_ASSERT(tupleType->kind() == TupleType::Kind);
   std::vector<TypePtr> types;
   for (const auto& subType : tupleType->containedTypes()) {
-    if (subType->kind() == TupleType::Kind) {
-      types.push_back(
-          getTupleTensorType(s_iter, s_iter_end, subType, complete));
-    } else {
-      types.push_back(getTensorType(s_iter->toTensor(), complete));
-      s_iter++;
-    }
+    TORCH_INTERNAL_ASSERT(s_iter != s_iter_end);
+    types.emplace_back(
+        inferShapeAndTypeForInput(subType, s_iter, s_iter_end, complete));
   }
   return TupleType::create(types);
 }
 
+static TypePtr inferShapeAndTypeForInput(
+    TypePtr input_type,
+    Stack::const_iterator& s_iter,
+    const Stack::const_iterator& s_iter_end,
+    bool complete) {
+  if (input_type->kind() == TupleType::Kind) {
+    return getTupleTensorType(s_iter, s_iter_end, input_type, complete);
+  } else if (input_type->kind() == TensorType::Kind) {
+    auto type = getTensorType(s_iter->toTensor(), complete);
+    s_iter++;
+    return type;
+  } else {
+    // Primitive type, keep as is.
+    s_iter++;
+    return input_type;
+  }
+}
+
 static void setInputTensorTypes(Graph& g, const Stack& stack, bool complete) {
-  printf("Set input tensor type\n");
   at::ArrayRef<Value*> input_values = g.inputs();
   auto s_iter = stack.begin();
   for (auto v : input_values) {
@@ -459,14 +476,8 @@ static void setInputTensorTypes(Graph& g, const Stack& stack, bool complete) {
         }
       }
     }
-    printf("input type kind: %s tag %d\n", v->type()->str().c_str(), int(v->type()->kind()));
-    if (v->type()->kind() == TupleType::Kind) {
-      AT_ASSERT(v->node()->kind() == prim::Param);
-      v->setType(getTupleTensorType(s_iter, stack.end(), v->type(), complete));
-    } else {
-      v->setType(getTensorType(s_iter->toTensor(), complete));
-      s_iter++;
-    }
+    v->setType(
+        inferShapeAndTypeForInput(v->type(), s_iter, stack.end(), complete));
   }
 }
 

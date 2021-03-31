@@ -133,7 +133,9 @@ class DeadCodeEliminator {
       // the loop body.
       liveValues_.insert(loop.nextCond());
     } else {
-      AT_ASSERT(outerNode->outputs().size() == node->inputs().size());
+      if (outerNode->outputs().size() != node->inputs().size()) {
+        AT_ASSERT(outerNode->outputs().size() == node->inputs().size());
+      }
       for (size_t i = 0; i < outerNode->outputs().size(); i++) {
         auto innerOutput = node->inputs()[i];
         auto outerOutput = outerNode->outputs()[i];

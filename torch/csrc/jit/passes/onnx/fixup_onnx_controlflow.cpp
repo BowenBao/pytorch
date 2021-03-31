@@ -350,10 +350,7 @@ void ONNXFixupUninitializedOutput(Node* node) {
       auto then_shape = then_tensor_type->symbolic_sizes();
       auto else_shape = else_tensor_type->symbolic_sizes();
       std::vector<::c10::ShapeSymbol> dims;
-      if (then_shape.rank() && else_shape.rank()) {
-        TORCH_CHECK(
-            then_shape.rank() == else_shape.rank(),
-            "Cannot export If operator that produce tensor of different rank between then branch and else branch.");
+      if (then_shape.rank() && else_shape.rank() && then_shape.rank() == else_shape.rank()) {
         for (auto j = 0; j < then_shape.rank().value(); ++j) {
           if (then_shape[j] == else_shape[j]) {
             dims.emplace_back(then_shape[j]);

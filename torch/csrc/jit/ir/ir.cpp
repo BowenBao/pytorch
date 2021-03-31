@@ -1091,11 +1091,13 @@ bool Node::hasSideEffects() const {
 
   auto op = maybeOperator();
   if (!op) {
-    TORCH_INTERNAL_ASSERT(
-        kind_.is_prim(),
-        "Only prim ops are allowed to not have a registered operator but ",
-        kind_.toDisplayString(),
-        " doesn't have one either. We don't know if this op has side effects.");
+    if (!kind_.is_prim()) {
+      TORCH_INTERNAL_ASSERT(
+          kind_.is_prim(),
+          "Only prim ops are allowed to not have a registered operator but ",
+          kind_.toDisplayString(),
+          " doesn't have one either. We don't know if this op has side effects.");
+    }
     return false;
   }
 

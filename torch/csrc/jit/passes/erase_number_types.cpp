@@ -6,13 +6,32 @@
 namespace torch {
 namespace jit {
 
+TypePtr fromNumberType(TypePtr typ) {
+  if (typ->isSubtypeOf(IntType::get())) {
+    return TensorType::createContiguous(at::kLong, at::kCPU, {});
+  } else if (typ->isSubtypeOf(FloatType::get())) {
+    return TensorType::createContiguous(at::kDouble, at::kCPU, {});
+  } else if (typ->isSubtypeOf(BoolType::get())) {
+    return TensorType::createContiguous(at::kBool, at::kCPU, {});
+  }
+  TORCH_CHECK(false, "Unknown number type: ", typ->str());
+}
+TypePtr fromBoolType() {
+  return TensorType::createContiguous(at::kBool, at::kCPU, {});
+}
+
 void EraseNumberTypesOnBlock(Block* block) {
+  auto numTypeToTensorType = [](Value* v) {
+    if (v->type()->isSubtypeOf(NumberType::get())) {
+      v->setType(fromNumberType(v->type()));
+    } else if (v->type()->isSubtypeOf(BoolType::get())) {
+      v->setType(fromBoolType());
+    }
+  };
   for (auto it = block->nodes().begin(), end = block->nodes().end(); it != end;
        ++it) {
     for (auto inp : it->inputs()) {
-      if (inp->type()->isSubtypeOf(NumberType::get())) {
-        inp->setType(TensorType::get());
-      }
+      numTypeToTensorType(inp);
     }
     for (auto sub : it->blocks()) {
       EraseNumberTypesOnBlock(sub);
@@ -49,11 +68,7 @@ void EraseNumberTypesOnBlock(Block* block) {
       } break;
       default: {
         for (auto o : it->outputs()) {
-          if (o->type()->isSubtypeOf(NumberType::get())) {
-            o->setType(TensorType::fromNumberType(o->type()));
-          } else if (o->type()->isSubtypeOf(BoolType::get())) {
-            o->setType(TensorType::fromBoolType());
-          }
+          numTypeToTensorType(o);
         }
       } break;
     }

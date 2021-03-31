@@ -1403,8 +1403,8 @@ class TestONNXRuntime(unittest.TestCase):
             def forward(self, x: float, y: float):
                 return x == y
 
-        x = 3
-        y = 2
+        x = 3.0
+        y = 2.0
         self.run_test(ArithmeticModule(), (x, y))
 
     # In scripting the first transpose node do not carry shape and dtype info.
@@ -4292,6 +4292,36 @@ class TestONNXRuntime(unittest.TestCase):
         model = torch.jit.script(ListModel())
         x = torch.randn(16, 3, 4)
         y = torch.randn(4, 5)
+        self.run_test(model, (x, y))
+
+    @skipIfUnsupportedMinOpsetVersion(11)
+    def test_list_set(self):
+        class ListModel(torch.nn.Module):
+            def forward(self, x, y):
+                res = []
+                for i in range(x.size(0)):
+                    res.append(x[i])
+                res[y] = x[y]
+                return res
+
+        model = torch.jit.script(ListModel())
+        x = torch.randn(12, 4)
+        y = torch.tensor(2, dtype=torch.long)
+        self.run_test(model, (x, y))
+
+    @skipIfUnsupportedMinOpsetVersion(11)
+    def test_list_idx_sum(self):
+        class ListModel(torch.nn.Module):
+            def forward(self, x, y):
+                indices = torch.arange(x.size(0))
+                res = []
+                for i in range(x.size(0)):
+                    res.append(x[i])
+                return res[torch.sum(indices[:y])]
+
+        model = torch.jit.script(ListModel())
+        x = torch.randn(12, 4)
+        y = torch.tensor(2, dtype=torch.long)
         self.run_test(model, (x, y))
 
     @skipIfUnsupportedMinOpsetVersion(9)
@@ -7191,6 +7221,32 @@ class TestONNXRuntime(unittest.TestCase):
         self.run_test(model, (x, anchors))
 
     @skipIfUnsupportedMinOpsetVersion(11)
+    def test_set_attr_5(self):
+        class MyModule(torch.nn.Module):
+            def __init__(self):
+                super(MyModule, self).__init__()
+                self.conv = torch.nn.Conv1d(10, 3, 3)
+                self.conv.bias = torch.nn.Parameter(torch.zeros(3, 10, 3))
+
+            def set_cell_anchors(self, anchors):
+                self.conv.weight = torch.randn(10)
+                for i in range(10):
+                    if i == 3:
+                        for j in range(10):
+                            w = self.conv.weight
+                            self.conv.weight = torch.randn(10) + w
+
+                    self.conv.weight = self.conv.weight + torch.randn(10)
+
+            def forward(self, anchors):
+                self.set_cell_anchors(anchors)
+                return self.conv.weight, self.conv.bias
+
+        model = torch.jit.script(MyModule())
+        anchors = torch.ones(3, 10, 3)
+        self.run_test(model, (anchors))
+
+    @skipIfUnsupportedMinOpsetVersion(11)
     def test_set_attr_in_loop(self):
         class MyModule(torch.nn.Module):
             def __init__(self):
@@ -7334,13 +7390,14 @@ class TestONNXRuntime(unittest.TestCase):
             # generate empty prev_state, if None is provided
             state_size = (2, batch_size, hidden_size, spatial_size_0, spatial_size_1)
             state = torch.zeros(state_size, device=input_data.device)
-            if prev_state.size(0) == 0:
-                state = state + 3
-                state[:] = torch.ones(batch_size, hidden_size, spatial_size_0, spatial_size_1) * 3
-                state = state + 3
-                state[:] = torch.ones(batch_size, hidden_size, spatial_size_0, spatial_size_1) * 4
-            else:
-                state = state + 2
+            for i in range(10):
+                if prev_state.size(0) == 0:
+                    state = state + 3
+                    state[:] = torch.ones(batch_size, hidden_size, spatial_size_0, spatial_size_1) * 3
+                    state = state + 3
+                    state[:] = torch.ones(batch_size, hidden_size, spatial_size_0, spatial_size_1) * 4
+                else:
+                    state = state + 2
             return state
 
         class Example(torch.nn.Module):
