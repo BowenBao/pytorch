@@ -59,7 +59,8 @@ def convert_to_onnx(model, input=None, opset_version=9, example_outputs=None,
                        dynamic_axes=dynamic_axes,
                        input_names=input_names, output_names=output_names,
                        fixed_batch_size=fixed_batch_size, training=training,
-                       onnx_shape_inference=onnx_shape_inference)
+                       onnx_shape_inference=onnx_shape_inference,
+                       verbose=True)
 
     # compute onnxruntime output prediction
     ort_sess = onnxruntime.InferenceSession(f.getvalue())
@@ -142,6 +143,7 @@ def run_model_test(self, model, batch_size=2, state_dict=None,
                 input_onnx.append(input[idx])
             input = input_onnx
         ort_outs = run_ort(ort_sess, input)
+        print(ort_outs, output)
         ort_compare_with_pytorch(ort_outs, output, rtol, atol, check_dtypes)
 
 
@@ -9056,16 +9058,28 @@ class TestONNXRuntime(unittest.TestCase):
         self.run_test(M(2, 1), (x,))
         self.run_test(M([-1, 3], [-2, -1]), (x,))
 
+    def test_sum(self):
+        class M(torch.nn.Module):
+            def forward(self, x):
+                return torch.sum(x)
+
+        x = torch.ones(12, 3)
+        self.run_test(M(), (x,), input_names=['x'], dynamic_axes={'x': [0]})
+
     def test_sum_empty_tensor(self):
         class M(torch.nn.Module):
             def forward(self, x):
-                return x[0:0].sum()
+                return x[0:0].sum(), x.sum()
 
         x = torch.ones(12)
         self.run_test(M(), (x,))
 
         x = torch.ones(2, 0, 3)
         self.run_test(M(), (x,))
+
+        x = torch.ones(0)
+        self.run_test(M(), (x,))
+
 
 def make_test(name, base, layer, bidirectional, initial_state,
               variable_length, dropout, script_test_min_opset_version,
