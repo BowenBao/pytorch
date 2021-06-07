@@ -513,6 +513,7 @@ std::pair<std::shared_ptr<TracingState>, Stack> trace(
       i++;
     }
     setTracingState(nullptr);
+    printf("C++ trace finish graph: %s\n", state->graph->toString().c_str());
 
     if (getInlineEverythingMode()) {
       Inline(*graph);

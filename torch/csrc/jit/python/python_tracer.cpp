@@ -170,7 +170,7 @@ void initPythonTracerBindings(PyObject* module) {
           [](TracingState& s, const std::string& scope_name) {
             s.graph->push_scope(scope_name);
           })
-      .def("pop_scope", [](TracingState& s) { s.graph->pop_scope(); })
+      .def("pop_scope", [](TracingState& s) { s.graph->pop_scope(); printf("Pop scope, graph %s\n", s.graph->toString().c_str()); })
       .def(
           "current_scope",
           [](TracingState& s) {
