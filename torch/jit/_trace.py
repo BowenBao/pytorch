@@ -131,7 +131,6 @@ class ONNXTracedModule(torch.nn.Module):
             self.strict,
             self._force_outplace,
         )
-        print('graph in tracer:', graph)
 
         if self._return_inputs:
             return graph, outs[0], ret_inputs[0]

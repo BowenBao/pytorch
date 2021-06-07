@@ -198,7 +198,6 @@ def _optimize_graph(graph, operator_export_type, _disable_torch_constant_prop=Fa
             dynamic_axes = {} if dynamic_axes is None else dynamic_axes
             torch._C._jit_pass_onnx_set_dynamic_input_shape(graph, dynamic_axes, input_names)
         graph = torch._C._jit_pass_onnx(graph, operator_export_type)
-        print('graph', graph)
         torch._C._jit_pass_lint(graph)
 
         torch._C._jit_pass_onnx_scalar_type_analysis(graph, True, _export_onnx_opset_version)
@@ -396,7 +395,6 @@ def _create_jit_graph(model, args, _retain_param_name):
     if isinstance(model, torch.jit.ScriptModule):
         try:
             graph = model.forward.graph
-            print('script graph:', graph)
             torch._C._jit_pass_onnx_function_substitution(graph)
             freezed_m = torch._C._freeze_module(model._c, preserveParameters=True)
             module, params = torch._C._jit_onnx_list_model_parameters(freezed_m)

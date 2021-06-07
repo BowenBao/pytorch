@@ -61,10 +61,6 @@ void functionCallSubstitution(Block* block) {
           if (!function.isGraphFunction()) {
             continue;
           }
-          GRAPH_UPDATE(
-            "Function in ONNX function call substitution body: ",
-              *function.graph()
-          );
           functionCallSubstitution(function.graph()->block());
           inlineCallTo(cur, &function, false);
         }
