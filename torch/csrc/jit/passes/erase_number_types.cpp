@@ -40,6 +40,7 @@ void EraseNumberTypesOnBlock(Block* block) {
           WithInsertPoint guard(*it);
           Value* r = block->owningGraph()->insertConstant(
               scalar_to_tensor(s), c10::nullopt, it->scope());
+          r->node()->copyMetadata(*it);
           it->output()->replaceAllUsesWith(r);
           it.destroyCurrent();
         }
